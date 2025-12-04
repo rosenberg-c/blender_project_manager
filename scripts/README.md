@@ -13,10 +13,20 @@
 ```sh
 # Run rename object
 /Applications/Blender.app/Contents/MacOS/Blender --background \
-  --python scripts/rename_objects.py -- \
+  --python scripts/rename_objects_and_ids.py -- \
   --root-dir "." \
   --lib-path "./blendfile.blend" --old-name "OldObjectName" \
-  --new-name "NewObjectName"
+  --new-name "NewObjectName" \
+  --id-type object
+
+# Run rename collection
+/Applications/Blender.app/Contents/MacOS/Blender --background \
+  --python scripts/rename_objects_and_ids.py -- \
+  --root-dir "." \
+  --lib-path "./blendfile.blend" \
+  --old-name "OldCollectionName" \
+  --new-name "NewCollectionName" \
+  --id-type collection
 
 
 ```
