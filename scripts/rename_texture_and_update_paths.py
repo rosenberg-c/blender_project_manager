@@ -198,11 +198,54 @@ def update_image_paths_in_blend(old_path_fragment, new_path_fragment):
     return changed_any
 
 
+def update_library_paths_in_blend(old_path_fragment, new_path_fragment):
+    """
+    In the currently open .blend file, replace any library filepath whose
+    absolute path contains old_path_fragment with one where that fragment
+    is replaced by new_path_fragment.
+
+    Relative vs absolute is preserved (same logic as images).
+    """
+    changed_any = False
+
+    for lib in bpy.data.libraries:
+        if not lib.filepath:
+            continue
+
+        original_path = lib.filepath
+        is_relative = original_path.startswith("//")
+
+        abs_path = bpy.path.abspath(original_path)
+
+        if old_path_fragment in abs_path:
+            new_abs_path = abs_path.replace(old_path_fragment, new_path_fragment)
+
+            if abs_path == new_abs_path:
+                continue
+
+            if is_relative:
+                new_path = bpy.path.relpath(new_abs_path)
+            else:
+                new_path = new_abs_path
+
+            print(f"    Library '{lib.name}':")
+            print(f"      {original_path}")
+            print(f"      -> {new_path}")
+
+            lib.filepath = new_path
+            changed_any = True
+
+    return changed_any
+
+
 def process_blend_file(blend_path, old_path_fragment, new_path_fragment):
     print(f"\nProcessing .blend: {blend_path}")
     bpy.ops.wm.open_mainfile(filepath=blend_path)
 
-    changed = update_image_paths_in_blend(old_path_fragment, new_path_fragment)
+    changed_images = update_image_paths_in_blend(old_path_fragment, new_path_fragment)
+    changed_libs = update_library_paths_in_blend(old_path_fragment, new_path_fragment)
+
+    changed = changed_images or changed_libs
 
     if changed:
         print("  Changes detected, saving file...")
