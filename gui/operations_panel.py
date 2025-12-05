@@ -114,15 +114,26 @@ class OperationsPanelWidget(QWidget):
         if not self.current_file:
             return
 
-        new_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Select New Location",
-            str(self.current_file),
-            f"*{self.current_file.suffix}"
-        )
+        # Show loading state while dialog is open
+        self.browse_btn.setText("Browsing...")
+        self.browse_btn.setEnabled(False)
+        QApplication.processEvents()
 
-        if new_path:
-            self.new_path_input.setText(new_path)
+        try:
+            new_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Select New Location",
+                str(self.current_file),
+                f"*{self.current_file.suffix}"
+            )
+
+            if new_path:
+                self.new_path_input.setText(new_path)
+
+        finally:
+            # Restore button state
+            self.browse_btn.setText("Browse...")
+            self.browse_btn.setEnabled(True)
 
     def _preview_operation(self):
         """Show preview dialog for the operation."""
@@ -192,43 +203,78 @@ class OperationsPanelWidget(QWidget):
         if reply != QMessageBox.Yes:
             return
 
-        # Create progress dialog
-        progress_dialog = OperationProgressDialog(
-            f"Moving {self.current_file.name}",
-            self
-        )
+        # Show loading state immediately
+        self.execute_btn.setText("Executing...")
+        self.execute_btn.setEnabled(False)
+        self.preview_btn.setEnabled(False)
+        self.browse_btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        QApplication.processEvents()  # Force UI update
 
-        # Execute operation
-        result = self.controller.execute_move_file(
-            self.current_file,
-            new_path,
-            progress_dialog.update_progress
-        )
+        try:
+            # Create and show progress dialog immediately
+            progress_dialog = OperationProgressDialog(
+                f"Moving {self.current_file.name}",
+                self
+            )
+            progress_dialog.show()  # Show immediately, don't wait for exec()
+            QApplication.processEvents()  # Force dialog to appear
 
-        # Show result
-        if result.success:
-            progress_dialog.update_progress(100, result.message)
-            progress_dialog.exec()
-
-            QMessageBox.information(
-                self,
-                "Success",
-                f"{result.message}\n\n{result.changes_made} changes made."
+            # Execute operation
+            result = self.controller.execute_move_file(
+                self.current_file,
+                new_path,
+                progress_dialog.update_progress
             )
 
-            # Clear selection
-            self.current_file = None
-            self.file_display.setText("<i>No file selected</i>")
-            self.new_path_input.clear()
-            self.browse_btn.setEnabled(False)
-            self.preview_btn.setEnabled(False)
-            self.execute_btn.setEnabled(False)
-        else:
-            progress_dialog.mark_error(result.message)
-            progress_dialog.exec()
+            # Restore normal cursor
+            QApplication.restoreOverrideCursor()
+
+            # Show result
+            if result.success:
+                progress_dialog.update_progress(100, result.message)
+                progress_dialog.exec()
+
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"{result.message}\n\n{result.changes_made} changes made."
+                )
+
+                # Clear selection
+                self.current_file = None
+                self.file_display.setText("<i>No file selected</i>")
+                self.new_path_input.clear()
+                self.browse_btn.setEnabled(False)
+                self.preview_btn.setEnabled(False)
+                self.execute_btn.setText("Execute Move")  # Restore text
+                self.execute_btn.setEnabled(False)
+            else:
+                progress_dialog.mark_error(result.message)
+                progress_dialog.exec()
+
+                QMessageBox.critical(
+                    self,
+                    "Error",
+                    f"Operation failed:\n\n{result.message}"
+                )
+
+                # Restore button state on error
+                self.execute_btn.setText("Execute Move")
+                self.execute_btn.setEnabled(True)
+                self.preview_btn.setEnabled(True)
+                self.browse_btn.setEnabled(True)
+
+        except Exception as e:
+            # Restore state on exception
+            QApplication.restoreOverrideCursor()
+            self.execute_btn.setText("Execute Move")
+            self.execute_btn.setEnabled(True)
+            self.preview_btn.setEnabled(True)
+            self.browse_btn.setEnabled(True)
 
             QMessageBox.critical(
                 self,
                 "Error",
-                f"Operation failed:\n\n{result.message}"
+                f"Operation failed:\n\n{str(e)}"
             )
