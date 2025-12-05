@@ -12,6 +12,7 @@ from PySide6.QtGui import QCursor
 from controllers.file_operations_controller import FileOperationsController
 from gui.preview_dialog import OperationPreviewDialog
 from gui.progress_dialog import OperationProgressDialog
+from gui.theme import Theme
 
 
 class OperationsPanelWidget(QWidget):
@@ -44,13 +45,7 @@ class OperationsPanelWidget(QWidget):
 
         self.file_display = QLabel("<i>No file selected</i>")
         self.file_display.setWordWrap(True)
-        self.file_display.setStyleSheet(
-            "padding: 10px; "
-            "background-color: #f0f0f0; "
-            "color: #333333; "
-            "border-radius: 5px; "
-            "border: 1px solid #cccccc;"
-        )
+        self.file_display.setStyleSheet(Theme.get_file_display_style())
         layout.addWidget(self.file_display)
 
         # Separator
@@ -79,7 +74,7 @@ class OperationsPanelWidget(QWidget):
         self.preview_btn = QPushButton("Preview Changes")
         self.preview_btn.clicked.connect(self._preview_operation)
         self.preview_btn.setEnabled(False)
-        self.preview_btn.setStyleSheet("background-color: #4CAF50; color: white; padding: 8px;")
+        self.preview_btn.setProperty("class", "info")
         btn_row1.addWidget(self.preview_btn)
 
         layout.addLayout(btn_row1)
@@ -88,7 +83,7 @@ class OperationsPanelWidget(QWidget):
         self.execute_btn = QPushButton("Execute Move")
         self.execute_btn.clicked.connect(self._execute_operation)
         self.execute_btn.setEnabled(False)
-        self.execute_btn.setStyleSheet("background-color: #2196F3; color: white; padding: 10px; font-weight: bold;")
+        self.execute_btn.setProperty("class", "primary")
         layout.addWidget(self.execute_btn)
 
         # Add stretch to push everything to top

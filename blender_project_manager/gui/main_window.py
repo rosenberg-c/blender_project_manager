@@ -14,6 +14,7 @@ from controllers.project_controller import ProjectController
 from controllers.file_operations_controller import FileOperationsController
 from gui.file_browser import FileBrowserWidget
 from gui.operations_panel import OperationsPanelWidget
+from gui.theme import Theme
 
 
 class MainWindow(QMainWindow):
@@ -75,10 +76,7 @@ class MainWindow(QMainWindow):
         """Create the project selector bar at the top of the window."""
         bar = QFrame()
         bar.setFrameShape(QFrame.StyledPanel)
-        bar.setStyleSheet(
-            "QFrame { background-color: #f5f5f5; border: 1px solid #cccccc; "
-            "border-radius: 3px; padding: 2px; }"
-        )
+        bar.setStyleSheet(Theme.get_project_bar_style())
         bar.setMaximumHeight(35)  # Limit height to single row
 
         layout = QHBoxLayout(bar)
@@ -95,21 +93,13 @@ class MainWindow(QMainWindow):
         self.project_path_display.setReadOnly(True)
         self.project_path_display.setPlaceholderText("No project selected")
         self.project_path_display.setMaximumHeight(25)
-        self.project_path_display.setStyleSheet(
-            "QLineEdit { background-color: white; color: #333333; "
-            "padding: 3px 5px; border: 1px solid #cccccc; border-radius: 2px; }"
-        )
         layout.addWidget(self.project_path_display, stretch=1)
 
         # Select/Change button
         self.select_project_btn = QPushButton("Select Project...")
         self.select_project_btn.clicked.connect(self.select_project)
         self.select_project_btn.setMaximumHeight(25)
-        self.select_project_btn.setStyleSheet(
-            "QPushButton { background-color: #4CAF50; color: white; "
-            "padding: 3px 12px; border-radius: 2px; font-size: 12px; }"
-            "QPushButton:hover { background-color: #45a049; }"
-        )
+        self.select_project_btn.setProperty("class", "primary")
         layout.addWidget(self.select_project_btn)
 
         return bar
