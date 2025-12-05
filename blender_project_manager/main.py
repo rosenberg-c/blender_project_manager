@@ -25,11 +25,12 @@ def main():
     app.setOrganizationName("BlenderTools")
     app.setApplicationVersion("0.1.0")
 
-    # Apply global theme stylesheet
+    # Create and show main window (theme will be loaded in MainWindow.__init__)
+    window = MainWindow()
+
+    # Apply global theme stylesheet after window loads theme preference
     app.setStyleSheet(Theme.get_stylesheet())
 
-    # Create and show main window
-    window = MainWindow()
     window.show()
 
     # Run application event loop

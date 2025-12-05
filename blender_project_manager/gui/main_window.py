@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFileDialog, QMessageBox, QStatusBar,
-    QLabel, QPushButton, QLineEdit, QFrame
+    QLabel, QPushButton, QLineEdit, QFrame, QApplication
 )
 
 from controllers.project_controller import ProjectController
@@ -30,6 +30,9 @@ class MainWindow(QMainWindow):
         # Config file for storing last project path
         self.config_dir = Path.home() / '.blender_project_manager'
         self.config_file = self.config_dir / 'last_project.json'
+
+        # Load theme preference FIRST, before creating any UI
+        self.load_theme_preference()
 
         # Initialize controllers
         self.project_controller = ProjectController()
@@ -74,35 +77,50 @@ class MainWindow(QMainWindow):
 
     def create_project_selector_bar(self) -> QWidget:
         """Create the project selector bar at the top of the window."""
-        bar = QFrame()
-        bar.setFrameShape(QFrame.StyledPanel)
-        bar.setStyleSheet(Theme.get_project_bar_style())
-        bar.setMaximumHeight(35)  # Limit height to single row
+        self.project_bar = QFrame()
+        self.project_bar.setFrameShape(QFrame.StyledPanel)
+        self.project_bar.setStyleSheet(Theme.get_project_bar_style())
+        self.project_bar.setMaximumHeight(42)  # Very compact height
+        self.project_bar.setMinimumHeight(32)
 
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(5, 2, 5, 2)
+        layout = QHBoxLayout(self.project_bar)
+        layout.setContentsMargins(3, 3, 3, 3)  # Very tight margins
         layout.setSpacing(5)
 
         # Label
         label = QLabel("<b>Project:</b>")
-        label.setMaximumHeight(25)
         layout.addWidget(label)
 
         # Project path display (read-only line edit)
         self.project_path_display = QLineEdit()
         self.project_path_display.setReadOnly(True)
         self.project_path_display.setPlaceholderText("No project selected")
-        self.project_path_display.setMaximumHeight(25)
+        self.project_path_display.setFixedHeight(22)
         layout.addWidget(self.project_path_display, stretch=1)
 
         # Select/Change button
         self.select_project_btn = QPushButton("Select Project...")
         self.select_project_btn.clicked.connect(self.select_project)
-        self.select_project_btn.setMaximumHeight(25)
+        self.select_project_btn.setFixedHeight(22)
         self.select_project_btn.setProperty("class", "primary")
         layout.addWidget(self.select_project_btn)
 
-        return bar
+        # Theme toggle button
+        self.theme_toggle_btn = QPushButton("🌙")  # Default icon
+        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+        self.theme_toggle_btn.setFixedHeight(22)
+        self.theme_toggle_btn.setFixedWidth(28)
+        self.theme_toggle_btn.setToolTip("Toggle dark/light theme")
+        layout.addWidget(self.theme_toggle_btn)
+
+        # Apply compact button styles
+        self._update_project_bar_button_styles()
+
+        # Set correct icon based on current theme
+        current_theme = Theme.current_theme
+        self.theme_toggle_btn.setText("☀️" if current_theme == 'light' else "🌙")
+
+        return self.project_bar
 
     def setup_menu(self):
         """Create menu bar."""
@@ -192,7 +210,15 @@ class MainWindow(QMainWindow):
         """
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
-            config_data = {"last_project": str(project_root)}
+
+            # Load existing config to preserve theme preference
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            config_data["last_project"] = str(project_root)
+
             with open(self.config_file, 'w') as f:
                 json.dump(config_data, f, indent=2)
         except Exception as e:
@@ -245,6 +271,99 @@ class MainWindow(QMainWindow):
         self.operations_panel.set_file(file_path)
         self.status_bar.showMessage(f"Selected: {file_path.name}")
 
+    def _update_project_bar_button_styles(self):
+        """Update project bar button styles with theme colors and compact padding."""
+        c = Theme.get_colors()
+
+        # Primary button (Select Project) - compact with theme colors
+        self.select_project_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['primary']};
+                color: {c['text_inverse']};
+                border: none;
+                padding: 2px 10px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {c['primary_hover']};
+            }}
+        """)
+
+        # Theme toggle button - compact with base button colors
+        self.theme_toggle_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {c['bg_secondary']};
+                color: {c['text_primary']};
+                border: 1px solid {c['border_medium']};
+                padding: 2px;
+            }}
+            QPushButton:hover {{
+                background-color: {c['bg_tertiary']};
+                border-color: {c['border_dark']};
+            }}
+        """)
+
+    def toggle_theme(self):
+        """Toggle between light and dark themes."""
+        new_theme = Theme.toggle_theme()
+
+        # Update the app stylesheet
+        QApplication.instance().setStyleSheet(Theme.get_stylesheet())
+
+        # Update component-specific styles that don't use global stylesheet
+        self.project_bar.setStyleSheet(Theme.get_project_bar_style())
+        self.operations_panel.file_display.setStyleSheet(Theme.get_file_display_style())
+
+        # Update project bar buttons with new theme colors
+        self._update_project_bar_button_styles()
+
+        # Update button icon
+        self.theme_toggle_btn.setText("☀️" if new_theme == 'light' else "🌙")
+
+        # Save theme preference
+        self.save_theme_preference(new_theme)
+
+    def save_theme_preference(self, theme: str):
+        """Save the current theme preference to config file.
+
+        Args:
+            theme: Theme name ('light' or 'dark')
+        """
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+
+            # Load existing config or create new one
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            config_data['theme'] = theme
+
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save theme preference: {e}")
+
+    def load_theme_preference(self):
+        """Load and apply the saved theme preference."""
+        try:
+            if not self.config_file.exists():
+                return
+
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            theme = config_data.get('theme', 'light')
+            Theme.set_theme(theme)
+
+            # Update button icon based on loaded theme (if button exists)
+            if hasattr(self, 'theme_toggle_btn'):
+                self.theme_toggle_btn.setText("☀️" if theme == 'light' else "🌙")
+
+        except Exception as e:
+            print(f"Warning: Could not load theme preference: {e}")
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -260,6 +379,7 @@ class MainWindow(QMainWindow):
             "<li>Move/rename files with automatic reference updates</li>"
             "<li>Preview changes before applying</li>"
             "<li>Progress tracking</li>"
+            "<li>Light/Dark theme support</li>"
             "</ul>"
             "<p>Built with Python and PySide6 (Qt for Python)</p>"
         )
