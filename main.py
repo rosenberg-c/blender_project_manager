@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication
 sys.path.insert(0, str(Path(__file__).parent))
 
 from gui.main_window import MainWindow
+from gui.theme import Theme
 
 
 def main():
@@ -23,6 +24,9 @@ def main():
     app.setApplicationName("Blender Project Manager")
     app.setOrganizationName("BlenderTools")
     app.setApplicationVersion("0.1.0")
+
+    # Apply global theme stylesheet
+    app.setStyleSheet(Theme.get_stylesheet())
 
     # Create and show main window
     window = MainWindow()
