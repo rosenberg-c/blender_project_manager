@@ -4,8 +4,11 @@
 class Theme:
     """Centralized theme configuration for the application."""
 
-    # Color palette
-    COLORS = {
+    # Current theme mode
+    current_theme = 'light'
+
+    # Light theme color palette
+    COLORS_LIGHT = {
         # Background colors
         'bg_main': '#ffffff',
         'bg_secondary': '#f5f5f5',
@@ -45,6 +48,78 @@ class Theme:
         'row_error': '#fadbd8',
     }
 
+    # Dark theme color palette
+    COLORS_DARK = {
+        # Background colors
+        'bg_main': '#1e1e1e',
+        'bg_secondary': '#2d2d2d',
+        'bg_tertiary': '#3d3d3d',
+        'bg_dark': '#0d0d0d',
+
+        # Text colors
+        'text_primary': '#e0e0e0',
+        'text_secondary': '#b0b0b0',
+        'text_light': '#808080',
+        'text_inverse': '#1e1e1e',
+
+        # Border colors
+        'border_light': '#3d3d3d',
+        'border_medium': '#505050',
+        'border_dark': '#707070',
+
+        # Status colors
+        'success': '#27ae60',
+        'success_hover': '#2ecc71',
+        'warning': '#f39c12',
+        'warning_hover': '#f5b041',
+        'error': '#c0392b',
+        'error_hover': '#e74c3c',
+        'info': '#3498db',
+        'info_hover': '#5dade2',
+
+        # Semantic colors
+        'primary': '#2ecc71',
+        'primary_hover': '#27ae60',
+        'accent': '#3498db',
+        'accent_hover': '#5dade2',
+
+        # Table row colors
+        'row_ok': '#1a3329',
+        'row_warning': '#3d3319',
+        'row_error': '#3d1f1f',
+    }
+
+    @classmethod
+    def get_colors(cls) -> dict:
+        """Get the current theme's color palette.
+
+        Returns:
+            Color palette dictionary
+        """
+        if cls.current_theme == 'dark':
+            return cls.COLORS_DARK
+        return cls.COLORS_LIGHT
+
+    @classmethod
+    def set_theme(cls, theme: str):
+        """Set the current theme.
+
+        Args:
+            theme: 'light' or 'dark'
+        """
+        if theme in ('light', 'dark'):
+            cls.current_theme = theme
+
+    @classmethod
+    def toggle_theme(cls) -> str:
+        """Toggle between light and dark themes.
+
+        Returns:
+            New theme name
+        """
+        cls.current_theme = 'dark' if cls.current_theme == 'light' else 'light'
+        return cls.current_theme
+
     # Spacing
     SPACING = {
         'xs': '2px',
@@ -77,7 +152,7 @@ class Theme:
         Returns:
             QSS stylesheet string
         """
-        c = cls.COLORS
+        c = cls.get_colors()
         s = cls.SPACING
         r = cls.RADIUS
         f = cls.FONT_SIZE
@@ -122,7 +197,7 @@ class Theme:
             border-radius: {r['sm']};
             padding: {s['sm']} {s['lg']};
             font-size: {f['md']};
-            min-height: 25px;
+            min-height: 15px;
         }}
 
         QPushButton:hover {{
@@ -291,7 +366,7 @@ class Theme:
         Returns:
             QSS stylesheet string
         """
-        c = cls.COLORS
+        c = cls.get_colors()
         return f"""
             QFrame {{
                 background-color: {c['bg_secondary']};
@@ -308,7 +383,7 @@ class Theme:
         Returns:
             QSS stylesheet string
         """
-        c = cls.COLORS
+        c = cls.get_colors()
         return f"""
             padding: {cls.SPACING['md']};
             background-color: {c['bg_secondary']};
