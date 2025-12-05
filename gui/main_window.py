@@ -42,6 +42,9 @@ class MainWindow(QMainWindow):
         self.setup_menu()
         self.setup_statusbar()
 
+        # Restore window geometry and splitter state
+        self.restore_window_state()
+
         # Try to load last project automatically
         self.load_last_project()
 
@@ -58,22 +61,22 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(project_bar)
 
         # Create horizontal splitter for file browser and operations panel
-        splitter = QSplitter(Qt.Horizontal)
+        self.splitter = QSplitter(Qt.Horizontal)
 
         # Left: File browser
-        self.file_browser = FileBrowserWidget(self.project_controller)
+        self.file_browser = FileBrowserWidget(self.project_controller, self.config_file)
         self.file_browser.file_selected.connect(self._on_file_selected)
-        splitter.addWidget(self.file_browser)
+        self.splitter.addWidget(self.file_browser)
 
         # Right: Operations panel
         self.operations_panel = OperationsPanelWidget(self.file_ops_controller)
-        splitter.addWidget(self.operations_panel)
+        self.splitter.addWidget(self.operations_panel)
 
         # Set initial sizes (2:1 ratio)
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(0, 2)
+        self.splitter.setStretchFactor(1, 1)
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(self.splitter)
 
     def create_project_selector_bar(self) -> QWidget:
         """Create the project selector bar at the top of the window."""
@@ -182,6 +185,9 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Project: {project_root}")
             self.setWindowTitle(f"Blender Project Manager - {project_root.name}")
 
+            # Restore file browser state (expanded paths and selected file)
+            self.file_browser.restore_state()
+
             # Save as last project
             self.save_last_project(project_root)
 
@@ -259,6 +265,9 @@ class MainWindow(QMainWindow):
             self.file_browser.set_root(project_root)
             self.status_bar.showMessage(f"Loaded project: {project_root}")
             self.setWindowTitle(f"Blender Project Manager - {project_root.name}")
+
+            # Restore file browser state (expanded paths and selected file)
+            self.file_browser.restore_state()
         else:
             self.status_bar.showMessage("Failed to load last project. Please select a project.")
 
@@ -364,6 +373,57 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Warning: Could not load theme preference: {e}")
 
+    def save_window_state(self):
+        """Save window geometry and splitter state to config file."""
+        try:
+            import base64
+
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+
+            # Load existing config
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            # Save window geometry
+            geometry = self.saveGeometry()
+            config_data['window_geometry'] = base64.b64encode(geometry.data()).decode('utf-8')
+
+            # Save splitter state
+            splitter_state = self.splitter.saveState()
+            config_data['splitter_state'] = base64.b64encode(splitter_state.data()).decode('utf-8')
+
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save window state: {e}")
+
+    def restore_window_state(self):
+        """Restore window geometry and splitter state from config file."""
+        try:
+            import base64
+            from PySide6.QtCore import QByteArray
+
+            if not self.config_file.exists():
+                return
+
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            # Restore window geometry
+            if 'window_geometry' in config_data:
+                geometry_data = base64.b64decode(config_data['window_geometry'])
+                self.restoreGeometry(QByteArray(geometry_data))
+
+            # Restore splitter state
+            if 'splitter_state' in config_data:
+                splitter_data = base64.b64decode(config_data['splitter_state'])
+                self.splitter.restoreState(QByteArray(splitter_data))
+
+        except Exception as e:
+            print(f"Warning: Could not restore window state: {e}")
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -390,6 +450,12 @@ class MainWindow(QMainWindow):
         Args:
             event: QCloseEvent
         """
+        # Save window state before closing
+        self.save_window_state()
+
+        # Save file browser state
+        self.file_browser.save_state()
+
         # Close project if open
         if self.project_controller.is_open:
             self.project_controller.close_project()
