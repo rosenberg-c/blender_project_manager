@@ -28,6 +28,7 @@ class FileBrowserWidget(QWidget):
         super().__init__(parent)
         self.project = project_controller
         self.config_file = config_file
+        self.pending_restore_state = False
 
         self.setup_ui()
 
@@ -49,6 +50,9 @@ class FileBrowserWidget(QWidget):
         self.model.setNameFilters(['*.blend', '*.png', '*.jpg', '*.jpeg', '*.hdr', '*.exr'])
         self.model.setNameFilterDisables(False)  # Hide non-matching files
 
+        # Connect to directoryLoaded signal for state restoration
+        self.model.directoryLoaded.connect(self._on_directory_loaded)
+
         self.tree.setModel(self.model)
         self.tree.setSelectionMode(QTreeView.SingleSelection)
 
@@ -64,6 +68,9 @@ class FileBrowserWidget(QWidget):
         self.tree.clicked.connect(self._on_item_clicked)
 
         layout.addWidget(self.tree)
+
+        # State restoration data
+        self.restore_data = None
 
     def set_root(self, path: Path):
         """Set the root directory for the file browser.
@@ -148,19 +155,22 @@ class FileBrowserWidget(QWidget):
             root_path: Project root path
             expanded_paths: List to append expanded paths to
         """
-        if self.tree.isExpanded(index):
-            file_path = Path(self.model.filePath(index))
-            if file_path.is_dir() and file_path != root_path:
-                try:
-                    # Store as relative path to project root
-                    rel_path = str(file_path.relative_to(root_path))
-                    expanded_paths.append(rel_path)
-                except ValueError:
-                    pass  # Path is outside project root
+        # Check children first
+        for row in range(self.model.rowCount(index)):
+            child_index = self.model.index(row, 0, index)
+            if child_index.isValid():
+                # Check if this child is expanded
+                if self.tree.isExpanded(child_index):
+                    file_path = Path(self.model.filePath(child_index))
+                    if file_path.is_dir():
+                        try:
+                            # Store as relative path to project root
+                            rel_path = str(file_path.relative_to(root_path))
+                            expanded_paths.append(rel_path)
+                        except ValueError:
+                            pass  # Path is outside project root
 
-            # Check children
-            for row in range(self.model.rowCount(index)):
-                child_index = self.model.index(row, 0, index)
+                # Recursively check this child's children
                 self._collect_expanded_paths(child_index, root_path, expanded_paths)
 
     def restore_state(self):
@@ -177,24 +187,64 @@ class FileBrowserWidget(QWidget):
             if not root_path:
                 return
 
-            # Restore expanded paths
-            expanded_paths = file_browser_state.get('expanded_paths', [])
-            for rel_path in expanded_paths:
-                full_path = root_path / rel_path
-                if full_path.exists() and full_path.is_dir():
-                    index = self.model.index(str(full_path))
-                    self.tree.expand(index)
+            # Store restoration data to be applied when directories are loaded
+            self.restore_data = {
+                'root_path': root_path,
+                'expanded_paths': file_browser_state.get('expanded_paths', []),
+                'selected_file': file_browser_state.get('selected_file'),
+                'pending_expansions': set(file_browser_state.get('expanded_paths', []))
+            }
+            self.pending_restore_state = True
 
-            # Restore selected file
-            selected_file = file_browser_state.get('selected_file')
-            if selected_file:
-                full_path = root_path / selected_file
-                if full_path.exists() and full_path.is_file():
-                    index = self.model.index(str(full_path))
+            # Try to expand paths that are already loaded
+            self._apply_pending_expansions()
+
+        except Exception as e:
+            print(f"Warning: Could not restore file browser state: {e}")
+
+    def _on_directory_loaded(self, path: str):
+        """Handle directory loaded event from the file system model.
+
+        Args:
+            path: Path of the directory that was loaded
+        """
+        if self.pending_restore_state and self.restore_data:
+            self._apply_pending_expansions()
+
+    def _apply_pending_expansions(self):
+        """Apply pending path expansions as directories become available."""
+        if not self.restore_data:
+            return
+
+        root_path = self.restore_data['root_path']
+        pending = self.restore_data['pending_expansions']
+
+        # Sort paths by depth (shallowest first) to ensure parent dirs are expanded before children
+        sorted_paths = sorted(pending, key=lambda p: p.count('/'))
+
+        # Try to expand all pending paths
+        expanded_any = False
+        for rel_path in sorted_paths:
+            full_path = root_path / rel_path
+            if full_path.exists() and full_path.is_dir():
+                index = self.model.index(str(full_path))
+                if index.isValid():
+                    self.tree.expand(index)
+                    pending.discard(rel_path)
+                    expanded_any = True
+
+        # If no more pending expansions, restore selected file
+        if not pending and self.restore_data.get('selected_file'):
+            selected_file = self.restore_data['selected_file']
+            full_path = root_path / selected_file
+            if full_path.exists() and full_path.is_file():
+                index = self.model.index(str(full_path))
+                if index.isValid():
                     self.tree.setCurrentIndex(index)
                     self.tree.scrollTo(index)
                     # Emit signal to update operations panel
                     self.file_selected.emit(full_path)
 
-        except Exception as e:
-            print(f"Warning: Could not restore file browser state: {e}")
+            # Clear restoration data
+            self.restore_data = None
+            self.pending_restore_state = False
