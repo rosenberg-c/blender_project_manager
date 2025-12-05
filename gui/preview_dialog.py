@@ -108,13 +108,16 @@ class OperationPreviewDialog(QDialog):
                 # Color code by status
                 if change.status == 'warning':
                     for col in range(5):
-                        self.table.item(i, col).setBackground(QColor(255, 255, 200))
+                        self.table.item(i, col).setBackground(QColor(255, 250, 205))  # Light yellow
+                        self.table.item(i, col).setForeground(QColor(139, 69, 19))    # Dark brown text
                 elif change.status == 'error':
                     for col in range(5):
-                        self.table.item(i, col).setBackground(QColor(255, 200, 200))
+                        self.table.item(i, col).setBackground(QColor(255, 230, 230))  # Light red
+                        self.table.item(i, col).setForeground(QColor(139, 0, 0))      # Dark red text
                 elif change.status == 'ok':
                     for col in range(5):
-                        self.table.item(i, col).setBackground(QColor(200, 255, 200))
+                        self.table.item(i, col).setBackground(QColor(230, 255, 230))  # Light green
+                        self.table.item(i, col).setForeground(QColor(0, 100, 0))      # Dark green text
 
             # Resize columns to fit content
             self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
