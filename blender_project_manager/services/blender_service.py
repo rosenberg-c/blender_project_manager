@@ -105,10 +105,63 @@ class BlenderService:
             status='ok' if not errors else 'error'
         ))
 
+        # Check if this is a .blend file - handle specially
+        is_blend_file = old_path.suffix.lower() == '.blend'
+
+        if is_blend_file:
+            # Preview internal path rebasing
+            try:
+                script_path = Path(__file__).parent.parent / "blender_lib" / "move_scene.py"
+                result = self.runner.run_script(
+                    script_path,
+                    {
+                        "old-scene": str(old_path),
+                        "new-scene": str(new_path),
+                        "delete-old": "false",
+                        "dry-run": "true"
+                    },
+                    timeout=120
+                )
+
+                move_result = extract_json_from_output(result.stdout)
+
+                # Add rebased images
+                for img in move_result.get("rebased_images", []):
+                    changes.append(PathChange(
+                        file_path=old_path,
+                        item_type='image_rebase',
+                        item_name=img["name"],
+                        old_path=img["old_path"],
+                        new_path=img["new_path"],
+                        status='ok'
+                    ))
+
+                # Add rebased libraries
+                for lib in move_result.get("rebased_libraries", []):
+                    changes.append(PathChange(
+                        file_path=old_path,
+                        item_type='library_rebase',
+                        item_name=lib["name"],
+                        old_path=lib["old_path"],
+                        new_path=lib["new_path"],
+                        status='ok'
+                    ))
+
+                # Add warnings
+                for warn in move_result.get("warnings", []):
+                    warnings.append(warn)
+
+            except Exception as e:
+                warnings.append(f"Could not preview internal path rebasing: {str(e)}")
+
         # Find all .blend files that might reference this file
         blend_files = self.filesystem.find_blend_files()
 
         for blend_file in blend_files:
+            # Skip the file being moved itself
+            if blend_file == old_path:
+                continue
+
             # Scan each blend for references to the file being moved
             blend_changes = self._scan_blend_for_references(
                 blend_file,
@@ -159,6 +212,13 @@ class BlenderService:
                     message=f"Target already exists: {new_path}",
                     errors=[f"File exists: {new_path}"]
                 )
+
+            # Check if this is a .blend file - handle specially
+            is_blend_file = old_path.suffix.lower() == '.blend'
+
+            if is_blend_file:
+                # Use move_scene script to rebase internal paths
+                return self._execute_move_blend_file(old_path, new_path, progress_callback)
 
             # Create target directory if needed
             report_progress(5, "Creating target directory...")
@@ -228,6 +288,130 @@ class BlenderService:
 
         except Exception as e:
             # Try to rollback the file move
+            if new_path.exists() and not old_path.exists():
+                try:
+                    shutil.move(str(new_path), str(old_path))
+                    report_progress(0, "Operation failed, rolled back")
+                except Exception:
+                    pass
+
+            return OperationResult(
+                success=False,
+                message=f"Operation failed: {str(e)}",
+                errors=[str(e)]
+            )
+
+    def _execute_move_blend_file(self,
+                                 old_path: Path,
+                                 new_path: Path,
+                                 progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationResult:
+        """Execute move of a .blend file with internal path rebasing.
+
+        This handles the special case of moving .blend files where internal
+        relative paths need to be rebased to still point to the same files.
+
+        Args:
+            old_path: Current path to .blend file
+            new_path: New path for .blend file
+            progress_callback: Optional callback(percentage, message)
+
+        Returns:
+            OperationResult with success status
+        """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
+        try:
+            report_progress(10, f"Moving .blend file and rebasing paths...")
+
+            # Use move_scene.py script to move and rebase
+            script_path = Path(__file__).parent.parent / "blender_lib" / "move_scene.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "old-scene": str(old_path),
+                    "new-scene": str(new_path),
+                    "delete-old": "true",  # Delete old file after successful move
+                    "dry-run": "false"
+                },
+                timeout=120
+            )
+
+            # Parse result
+            move_result = extract_json_from_output(result.stdout)
+
+            if not move_result.get("success"):
+                errors = move_result.get("errors", ["Unknown error"])
+                return OperationResult(
+                    success=False,
+                    message=f"Failed to move .blend file: {errors[0]}",
+                    errors=errors
+                )
+
+            report_progress(50, "Scanning for files that link to this .blend...")
+
+            # Now update references in OTHER .blend files that link to this one
+            blend_files = self.filesystem.find_blend_files()
+            files_to_update = []
+
+            for blend_file in blend_files:
+                # Skip the file we just moved
+                if blend_file == new_path:
+                    continue
+
+                # Check if this file references the moved .blend
+                changes = self._scan_blend_for_references(blend_file, old_path, new_path)
+                has_references = any(c.status != 'error' for c in changes)
+                if has_references:
+                    files_to_update.append(blend_file)
+
+            if not files_to_update:
+                report_progress(100, "Complete!")
+
+                # Build success message
+                rebased_count = len(move_result.get("rebased_images", [])) + len(move_result.get("rebased_libraries", []))
+                message = f"Successfully moved {old_path.name}"
+                if rebased_count > 0:
+                    message += f" and rebased {rebased_count} internal path(s)"
+
+                return OperationResult(
+                    success=True,
+                    message=message,
+                    changes_made=1
+                )
+
+            # Update files that link to this .blend
+            report_progress(70, f"Updating {len(files_to_update)} file(s) that link to this .blend...")
+            changes_made = 1  # The move itself
+
+            for i, blend_file in enumerate(files_to_update):
+                progress = 70 + int(25 * i / len(files_to_update))
+                report_progress(progress, f"Updating {blend_file.name}...")
+
+                result = self._update_blend_paths(blend_file, old_path, new_path)
+                if result:
+                    changes_made += result
+
+            report_progress(100, "Complete!")
+
+            # Build success message
+            rebased_count = len(move_result.get("rebased_images", [])) + len(move_result.get("rebased_libraries", []))
+            message = f"Successfully moved {old_path.name}"
+            if rebased_count > 0:
+                message += f", rebased {rebased_count} internal path(s)"
+            if len(files_to_update) > 0:
+                message += f", and updated {len(files_to_update)} linked file(s)"
+
+            return OperationResult(
+                success=True,
+                message=message,
+                changes_made=changes_made
+            )
+
+        except Exception as e:
+            # Try to rollback if file was moved but something failed
             if new_path.exists() and not old_path.exists():
                 try:
                     shutil.move(str(new_path), str(old_path))
