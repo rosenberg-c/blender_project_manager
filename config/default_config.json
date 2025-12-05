@@ -16,7 +16,7 @@
     "ignore_hidden": true
   },
   "ui": {
-    "theme": "light",
+    "theme": "dark",
     "recent_projects_limit": 10
   }
 }
