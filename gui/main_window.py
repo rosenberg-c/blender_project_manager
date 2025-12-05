@@ -390,17 +390,7 @@ class MainWindow(QMainWindow):
         Args:
             event: QCloseEvent
         """
-        reply = QMessageBox.question(
-            self,
-            "Quit",
-            "Are you sure you want to quit?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.Yes:
-            if self.project_controller.is_open:
-                self.project_controller.close_project()
-            event.accept()
-        else:
-            event.ignore()
+        # Close project if open
+        if self.project_controller.is_open:
+            self.project_controller.close_project()
+        event.accept()
