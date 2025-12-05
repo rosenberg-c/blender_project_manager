@@ -168,8 +168,8 @@ class BlenderService:
             report_progress(10, f"Moving {old_path.name}...")
             shutil.move(str(old_path), str(new_path))
 
-            # Update references in all blend files
-            report_progress(20, "Finding .blend files...")
+            # First, scan to find which files actually reference the moved file
+            report_progress(20, "Scanning .blend files for references...")
             blend_files = self.filesystem.find_blend_files()
 
             if not blend_files:
@@ -180,11 +180,32 @@ class BlenderService:
                     changes_made=1
                 )
 
-            total = len(blend_files)
+            # Scan all files to find which ones reference the moved file
+            files_to_update = []
+            for i, blend_file in enumerate(blend_files):
+                progress = 20 + int(40 * i / len(blend_files))
+                report_progress(progress, f"Scanning {blend_file.name}...")
+
+                changes = self._scan_blend_for_references(blend_file, old_path, new_path)
+                # Only include files that have actual references (not just errors)
+                has_references = any(c.status != 'error' for c in changes)
+                if has_references:
+                    files_to_update.append(blend_file)
+
+            if not files_to_update:
+                report_progress(100, "Complete (no references found)")
+                return OperationResult(
+                    success=True,
+                    message=f"File moved successfully (no .blend files referenced it)",
+                    changes_made=1
+                )
+
+            # Now update only the files that need it
+            report_progress(60, f"Updating {len(files_to_update)} .blend file(s)...")
             changes_made = 1  # The file move itself
 
-            for i, blend_file in enumerate(blend_files):
-                progress = 20 + int(75 * i / total)
+            for i, blend_file in enumerate(files_to_update):
+                progress = 60 + int(35 * i / len(files_to_update))
                 report_progress(progress, f"Updating {blend_file.name}...")
 
                 # Update paths in this blend file
@@ -201,7 +222,7 @@ class BlenderService:
 
             return OperationResult(
                 success=True,
-                message=f"Successfully moved {old_path.name} and updated {total} .blend file(s)",
+                message=f"Successfully moved {old_path.name} and updated {len(files_to_update)} .blend file(s)",
                 changes_made=changes_made
             )
 
