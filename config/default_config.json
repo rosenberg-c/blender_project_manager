@@ -1,0 +1,22 @@
+{
+  "blender": {
+    "macos_path": "/Applications/Blender.app/Contents/MacOS/Blender",
+    "windows_path": "C:/Program Files/Blender Foundation/Blender 4.0/blender.exe",
+    "linux_path": "/usr/bin/blender",
+    "timeout": 300
+  },
+  "cache": {
+    "enabled": true,
+    "directory": "~/.blender_project_manager/cache",
+    "max_age_days": 7
+  },
+  "scanning": {
+    "parallel_workers": 4,
+    "ignore_patterns": [".git", "__pycache__", ".DS_Store", ".blend1"],
+    "ignore_hidden": true
+  },
+  "ui": {
+    "theme": "light",
+    "recent_projects_limit": 10
+  }
+}
