@@ -563,7 +563,13 @@ class OperationsPanelWidget(QWidget):
 
                     # Show files with linked references
                     if updated_files_count > 0:
-                        message_parts.append(f"<br><b>Will update linked references in {updated_files_count} other file(s)</b><br>")
+                        message_parts.append(f"<br><b>Will update linked references in {updated_files_count} other file(s):</b><br>")
+                        for file_path in updated_files[:10]:
+                            from pathlib import Path
+                            file_name = Path(file_path).name
+                            message_parts.append(f"  • {file_name}<br>")
+                        if len(updated_files) > 10:
+                            message_parts.append(f"  ... and {len(updated_files) - 10} more<br>")
                 else:
                     message_parts.append("<b>No items will be renamed.</b><br>")
             else:
@@ -572,7 +578,13 @@ class OperationsPanelWidget(QWidget):
                     message_parts.append(f"<b>Successfully renamed {len(renamed)} item(s)!</b><br>")
 
                     if updated_files_count > 0:
-                        message_parts.append(f"<br><b>Updated {updated_files_count} file(s) with linked references</b><br>")
+                        message_parts.append(f"<br><b>Updated {updated_files_count} file(s) with linked references:</b><br>")
+                        for file_path in updated_files[:10]:
+                            from pathlib import Path
+                            file_name = Path(file_path).name
+                            message_parts.append(f"  • {file_name}<br>")
+                        if len(updated_files) > 10:
+                            message_parts.append(f"  ... and {len(updated_files) - 10} more<br>")
 
                     # Reload the list to show new names
                     self._load_objects()
