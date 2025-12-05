@@ -177,6 +177,14 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
                 if not old_ids:
                     continue
 
+                # Mark that this file will change
+                file_changed = True
+
+                # In dry-run mode, don't actually try to link and remap
+                if dry_run:
+                    continue
+
+                # Execute mode: actually perform the remap
                 # Link the new ID from library
                 try:
                     with bpy.data.libraries.load(lib_abs, link=True) as (data_from, data_to):
@@ -204,16 +212,13 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
 
                 # Remap old IDs to new ID
                 for old_id in old_ids:
-                    if not dry_run:
-                        old_id.user_remap(new_id)
+                    old_id.user_remap(new_id)
 
-                        # Remove old ID
-                        if id_type == "object":
-                            bpy.data.objects.remove(old_id)
-                        else:
-                            bpy.data.collections.remove(old_id)
-
-                    file_changed = True
+                    # Remove old ID
+                    if id_type == "object":
+                        bpy.data.objects.remove(old_id)
+                    else:
+                        bpy.data.collections.remove(old_id)
 
         if file_changed:
             result["updated_files"].append(blend_file)
