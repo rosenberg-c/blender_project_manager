@@ -1,11 +1,13 @@
 """Main application window."""
 
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QSplitter, QFileDialog, QMessageBox, QStatusBar
+    QSplitter, QFileDialog, QMessageBox, QStatusBar,
+    QLabel, QPushButton, QLineEdit, QFrame
 )
 
 from controllers.project_controller import ProjectController
@@ -24,6 +26,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Blender Project Manager")
         self.resize(1400, 800)
 
+        # Config file for storing last project path
+        self.config_dir = Path.home() / '.blender_project_manager'
+        self.config_file = self.config_dir / 'last_project.json'
+
         # Initialize controllers
         self.project_controller = ProjectController()
         self.file_ops_controller = FileOperationsController(self.project_controller)
@@ -32,8 +38,8 @@ class MainWindow(QMainWindow):
         self.setup_menu()
         self.setup_statusbar()
 
-        # Show project selection on startup
-        self.select_project()
+        # Try to load last project automatically
+        self.load_last_project()
 
     def setup_ui(self):
         """Create UI layout."""
@@ -42,6 +48,10 @@ class MainWindow(QMainWindow):
 
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Add project selector bar at top
+        project_bar = self.create_project_selector_bar()
+        main_layout.addWidget(project_bar)
 
         # Create horizontal splitter for file browser and operations panel
         splitter = QSplitter(Qt.Horizontal)
@@ -60,6 +70,49 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 1)
 
         main_layout.addWidget(splitter)
+
+    def create_project_selector_bar(self) -> QWidget:
+        """Create the project selector bar at the top of the window."""
+        bar = QFrame()
+        bar.setFrameShape(QFrame.StyledPanel)
+        bar.setStyleSheet(
+            "QFrame { background-color: #f5f5f5; border: 1px solid #cccccc; "
+            "border-radius: 3px; padding: 2px; }"
+        )
+        bar.setMaximumHeight(35)  # Limit height to single row
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(5, 2, 5, 2)
+        layout.setSpacing(5)
+
+        # Label
+        label = QLabel("<b>Project:</b>")
+        label.setMaximumHeight(25)
+        layout.addWidget(label)
+
+        # Project path display (read-only line edit)
+        self.project_path_display = QLineEdit()
+        self.project_path_display.setReadOnly(True)
+        self.project_path_display.setPlaceholderText("No project selected")
+        self.project_path_display.setMaximumHeight(25)
+        self.project_path_display.setStyleSheet(
+            "QLineEdit { background-color: white; color: #333333; "
+            "padding: 3px 5px; border: 1px solid #cccccc; border-radius: 2px; }"
+        )
+        layout.addWidget(self.project_path_display, stretch=1)
+
+        # Select/Change button
+        self.select_project_btn = QPushButton("Select Project...")
+        self.select_project_btn.clicked.connect(self.select_project)
+        self.select_project_btn.setMaximumHeight(25)
+        self.select_project_btn.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; "
+            "padding: 3px 12px; border-radius: 2px; font-size: 12px; }"
+            "QPushButton:hover { background-color: #45a049; }"
+        )
+        layout.addWidget(self.select_project_btn)
+
+        return bar
 
     def setup_menu(self):
         """Create menu bar."""
@@ -92,10 +145,15 @@ class MainWindow(QMainWindow):
 
     def select_project(self):
         """Show project selection dialog."""
+        # Start from current project or home
+        start_dir = str(Path.home())
+        if self.project_controller.is_open and self.project_controller.project_root:
+            start_dir = str(self.project_controller.project_root.parent)
+
         project_dir = QFileDialog.getExistingDirectory(
             self,
             "Select Blender Project Root Directory",
-            str(Path.home())
+            start_dir
         )
 
         if project_dir:
@@ -111,9 +169,13 @@ class MainWindow(QMainWindow):
 
         if success:
             # Update UI
+            self.project_path_display.setText(str(project_root))
             self.file_browser.set_root(project_root)
             self.status_bar.showMessage(f"Project: {project_root}")
             self.setWindowTitle(f"Blender Project Manager - {project_root.name}")
+
+            # Save as last project
+            self.save_last_project(project_root)
 
             # Show project info
             info = self.project_controller.get_project_info()
@@ -131,6 +193,58 @@ class MainWindow(QMainWindow):
                 f"Failed to open project at:\n{project_root}\n\n"
                 "Please check that Blender is installed at the expected location."
             )
+
+    def save_last_project(self, project_root: Path):
+        """Save the last opened project path to config file.
+
+        Args:
+            project_root: Project root path to save
+        """
+        try:
+            self.config_dir.mkdir(parents=True, exist_ok=True)
+            config_data = {"last_project": str(project_root)}
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Could not save last project: {e}")
+
+    def load_last_project(self):
+        """Load and open the last used project if it exists."""
+        try:
+            if not self.config_file.exists():
+                return
+
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            last_project = config_data.get('last_project')
+            if last_project:
+                last_project_path = Path(last_project)
+                if last_project_path.exists() and last_project_path.is_dir():
+                    # Open silently without showing info dialog
+                    self._open_project_silent(last_project_path)
+                else:
+                    self.status_bar.showMessage("Last project no longer exists. Please select a project.")
+
+        except Exception as e:
+            print(f"Warning: Could not load last project: {e}")
+
+    def _open_project_silent(self, project_root: Path):
+        """Open project without showing the info dialog.
+
+        Args:
+            project_root: Root directory of the project
+        """
+        success = self.project_controller.open_project(project_root)
+
+        if success:
+            # Update UI
+            self.project_path_display.setText(str(project_root))
+            self.file_browser.set_root(project_root)
+            self.status_bar.showMessage(f"Loaded project: {project_root}")
+            self.setWindowTitle(f"Blender Project Manager - {project_root.name}")
+        else:
+            self.status_bar.showMessage("Failed to load last project. Please select a project.")
 
     def _on_file_selected(self, file_path: Path):
         """Handle file selection from browser.

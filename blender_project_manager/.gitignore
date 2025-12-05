@@ -39,5 +39,8 @@ env/
 cache/
 .cache/
 
+# User config
+~/.blender_project_manager/
+
 # Logs
 *.log
