@@ -2,12 +2,45 @@
 
 import json
 import shutil
+from json import JSONDecoder
 from pathlib import Path
 from typing import Callable, List, Optional
 
 from blender_lib.blender_runner import BlenderRunner
 from blender_lib.models import OperationPreview, OperationResult, PathChange
 from services.filesystem_service import FilesystemService
+
+
+def extract_json_from_output(output: str, marker: str = "JSON_OUTPUT:") -> dict:
+    """Extract JSON data from Blender output.
+
+    Blender output often contains additional text after JSON like "Blender quit".
+    This function extracts only the valid JSON portion.
+
+    Args:
+        output: The stdout from Blender
+        marker: The marker string before the JSON
+
+    Returns:
+        Parsed JSON dictionary
+
+    Raises:
+        ValueError: If JSON cannot be found or parsed
+    """
+    json_start = output.find(marker)
+    if json_start == -1:
+        raise ValueError(f"No {marker} found in output")
+
+    # Start after the marker
+    json_text = output[json_start + len(marker):].lstrip()
+
+    # Use JSONDecoder to parse and find where JSON ends
+    decoder = JSONDecoder()
+    try:
+        obj, end_idx = decoder.raw_decode(json_text)
+        return obj
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse JSON: {e}")
 
 
 class BlenderService:
@@ -214,13 +247,8 @@ class BlenderService:
                 timeout=60
             )
 
-            # Parse JSON output
-            json_start = result.stdout.find("JSON_OUTPUT:")
-            if json_start == -1:
-                return changes
-
-            json_str = result.stdout[json_start + 12:]  # Skip "JSON_OUTPUT:"
-            refs = json.loads(json_str)
+            # Parse JSON output using helper function
+            refs = extract_json_from_output(result.stdout)
 
             target_str = str(target_file.resolve())
 
@@ -252,10 +280,13 @@ class BlenderService:
 
         except Exception as e:
             # If scanning fails, add a warning but don't fail the whole operation
+            # Log error to console for debugging
+            print(f"Warning: Error scanning {blend_path}: {str(e)}")
+
             changes.append(PathChange(
                 file_path=blend_path,
                 item_type='error',
-                item_name='scan_error',
+                item_name=f'Scan Error: {str(e)}',
                 old_path='',
                 new_path='',
                 status='error'
@@ -290,13 +321,8 @@ class BlenderService:
                 timeout=120
             )
 
-            # Parse JSON output
-            json_start = result.stdout.find("JSON_OUTPUT:")
-            if json_start == -1:
-                return 0
-
-            json_str = result.stdout[json_start + 12:]
-            update_result = json.loads(json_str)
+            # Parse JSON output using helper function
+            update_result = extract_json_from_output(result.stdout)
 
             return update_result.get("changes_count", 0)
 

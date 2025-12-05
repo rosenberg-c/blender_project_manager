@@ -44,7 +44,6 @@ class BlenderRunner:
 
         Raises:
             subprocess.TimeoutExpired: If operation takes too long
-            subprocess.CalledProcessError: If Blender exits with error
         """
         if not script_path.exists():
             raise FileNotFoundError(f"Script not found: {script_path}")
@@ -66,20 +65,16 @@ class BlenderRunner:
                 capture_output=True,
                 text=True,
                 timeout=timeout or self.timeout,
-                check=True
+                check=False  # Don't raise on non-zero exit - Blender often returns non-zero even on success
             )
+
+            # Only raise error if there's actual failure (no JSON output, critical errors, etc.)
+            # Let the caller decide if the output is acceptable
             return result
 
         except subprocess.TimeoutExpired as e:
             raise TimeoutError(
                 f"Blender operation timed out after {timeout or self.timeout} seconds"
-            ) from e
-
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Blender exited with error code {e.returncode}:\n"
-                f"STDOUT: {e.stdout}\n"
-                f"STDERR: {e.stderr}"
             ) from e
 
     def run_inline(self, python_code: str, timeout: Optional[int] = None) -> subprocess.CompletedProcess:
@@ -104,20 +99,13 @@ class BlenderRunner:
                 capture_output=True,
                 text=True,
                 timeout=timeout or self.timeout,
-                check=True
+                check=False  # Don't raise on non-zero exit
             )
             return result
 
         except subprocess.TimeoutExpired as e:
             raise TimeoutError(
                 f"Blender operation timed out after {timeout or self.timeout} seconds"
-            ) from e
-
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(
-                f"Blender exited with error code {e.returncode}:\n"
-                f"STDOUT: {e.stdout}\n"
-                f"STDERR: {e.stderr}"
             ) from e
 
     def test_connection(self) -> bool:
