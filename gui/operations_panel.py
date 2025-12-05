@@ -5,8 +5,9 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QFileDialog, QMessageBox
+    QLineEdit, QPushButton, QFileDialog, QMessageBox, QApplication
 )
+from PySide6.QtGui import QCursor
 
 from controllers.file_operations_controller import FileOperationsController
 from gui.preview_dialog import OperationPreviewDialog
@@ -135,12 +136,36 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.information(self, "No Change", "Source and target are the same.")
             return
 
-        # Get preview from controller
-        preview = self.controller.preview_move_file(self.current_file, new_path)
+        # Show loading state
+        self.preview_btn.setText("Loading Preview...")
+        self.preview_btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        QApplication.processEvents()  # Force UI update
 
-        # Show preview dialog
-        dialog = OperationPreviewDialog(preview, self)
-        dialog.exec()
+        try:
+            # Get preview from controller
+            preview = self.controller.preview_move_file(self.current_file, new_path)
+
+            # Restore normal state
+            QApplication.restoreOverrideCursor()
+            self.preview_btn.setText("Preview Changes")
+            self.preview_btn.setEnabled(True)
+
+            # Show preview dialog
+            dialog = OperationPreviewDialog(preview, self)
+            dialog.exec()
+
+        except Exception as e:
+            # Restore normal state on error
+            QApplication.restoreOverrideCursor()
+            self.preview_btn.setText("Preview Changes")
+            self.preview_btn.setEnabled(True)
+
+            QMessageBox.critical(
+                self,
+                "Preview Error",
+                f"Failed to generate preview:\n\n{str(e)}"
+            )
 
     def _execute_operation(self):
         """Execute the move operation."""
