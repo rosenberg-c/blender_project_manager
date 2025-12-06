@@ -35,6 +35,7 @@ class OperationsPanelWidget(QWidget):
         self.obj_list_data = {"objects": [], "collections": []}
         self.link_source_data = {"objects": [], "collections": []}
         self.link_scenes = []
+        self.link_locked_file: Path | None = None  # Track locked target file
 
         self.setup_ui()
         self._restore_link_state()
@@ -300,8 +301,8 @@ class OperationsPanelWidget(QWidget):
         self.link_scene_combo.currentTextChanged.connect(self._on_scene_changed)
         scene_layout.addWidget(self.link_scene_combo, stretch=1)
 
-        self.link_scene_lock = QCheckBox("🔒 Lock")
-        self.link_scene_lock.setToolTip("Lock scene selection to prevent it from changing when switching files")
+        self.link_scene_lock = QCheckBox("🔒 Lock Target")
+        self.link_scene_lock.setToolTip("Lock the target file and scene - you can only select a new target after unlocking")
         self.link_scene_lock.stateChanged.connect(self._on_scene_lock_changed)
         scene_layout.addWidget(self.link_scene_lock)
 
@@ -423,21 +424,27 @@ class OperationsPanelWidget(QWidget):
             self.tex_execute_btn.setEnabled(False)
 
         # Update Link tab (only for .blend files)
-        if is_blend:
-            self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
-            self.link_source_browse_btn.setEnabled(True)
-            self._load_scenes_for_target()
+        # If lock is enabled, don't update the target
+        if self.link_scene_lock.isChecked():
+            # Target is locked, don't update it
+            pass
         else:
-            self.link_target_display.setText("<i>No .blend file selected</i>")
-            self.link_scene_combo.clear()
-            self.link_scene_combo.setEnabled(False)
-            self.link_source_browse_btn.setEnabled(False)
-            self.link_load_btn.setEnabled(False)
-            self.link_preview_btn.setEnabled(False)
-            self.link_execute_btn.setEnabled(False)
-            self.link_source_input.clear()
-            self.link_items_list.clear()
-            self.link_source_data = {"objects": [], "collections": []}
+            # Target is not locked, update normally
+            if is_blend:
+                self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
+                self.link_source_browse_btn.setEnabled(True)
+                self._load_scenes_for_target()
+            else:
+                self.link_target_display.setText("<i>No .blend file selected</i>")
+                self.link_scene_combo.clear()
+                self.link_scene_combo.setEnabled(False)
+                self.link_source_browse_btn.setEnabled(False)
+                self.link_load_btn.setEnabled(False)
+                self.link_preview_btn.setEnabled(False)
+                self.link_execute_btn.setEnabled(False)
+                self.link_source_input.clear()
+                self.link_items_list.clear()
+                self.link_source_data = {"objects": [], "collections": []}
 
     def _load_objects(self):
         """Load objects and collections from the selected .blend file."""
@@ -1127,13 +1134,16 @@ class OperationsPanelWidget(QWidget):
 
     def _load_scenes_for_target(self):
         """Load scenes from the target .blend file."""
-        if not self.current_file or self.current_file.suffix != '.blend':
+        # Use locked file if lock is enabled, otherwise use current file
+        target_file = self.link_locked_file if self.link_scene_lock.isChecked() else self.current_file
+
+        if not target_file or target_file.suffix != '.blend':
             return
 
         try:
             # Get scenes from Blender service
             blender_service = self.controller.project.blender_service
-            scenes = blender_service.get_scenes(self.current_file)
+            scenes = blender_service.get_scenes(target_file)
 
             self.link_scenes = scenes
             self.link_scene_combo.clear()
@@ -1170,6 +1180,28 @@ class OperationsPanelWidget(QWidget):
         Args:
             state: Checkbox state
         """
+        if self.link_scene_lock.isChecked():
+            # Lock is enabled - save current file and scene
+            if self.current_file and self.current_file.suffix == '.blend':
+                self.link_locked_file = self.current_file
+            else:
+                # Can't lock without a .blend file selected
+                QMessageBox.warning(
+                    self,
+                    "No Target File",
+                    "Please select a .blend file as target before locking."
+                )
+                self.link_scene_lock.setChecked(False)
+                return
+        else:
+            # Lock is disabled - clear locked file
+            self.link_locked_file = None
+            # Update target to current file
+            if self.current_file and self.current_file.suffix == '.blend':
+                self.link_target_display.setText(f"<b>{self.current_file.name}</b><br><small>{str(self.current_file)}</small>")
+                self.link_source_browse_btn.setEnabled(True)
+                self._load_scenes_for_target()
+
         # Save lock state
         self._save_link_state()
 
@@ -1293,7 +1325,10 @@ class OperationsPanelWidget(QWidget):
         Args:
             dry_run: If True, only preview changes
         """
-        if not self.current_file or self.current_file.suffix != '.blend':
+        # Use locked file if lock is enabled, otherwise use current file
+        target_file = self.link_locked_file if self.link_scene_lock.isChecked() else self.current_file
+
+        if not target_file or target_file.suffix != '.blend':
             QMessageBox.warning(self, "No File", "Please select a .blend file as target.")
             return
 
@@ -1347,7 +1382,7 @@ class OperationsPanelWidget(QWidget):
 
             # Create operation parameters
             params = LinkOperationParams(
-                target_file=self.current_file,
+                target_file=target_file,
                 target_scene=target_scene,
                 source_file=Path(source_file),
                 item_names=item_names,
@@ -1432,14 +1467,18 @@ class OperationsPanelWidget(QWidget):
             # Save lock state
             link_state['scene_lock_enabled'] = self.link_scene_lock.isChecked()
 
-            # If lock is enabled, save the locked scene
+            # If lock is enabled, save the locked file and scene
             if self.link_scene_lock.isChecked():
+                if self.link_locked_file:
+                    link_state['locked_file'] = str(self.link_locked_file)
                 link_state['locked_scene'] = self.link_scene_combo.currentText()
 
             # Save per-file scene selection
-            if self.current_file and self.link_scene_combo.currentText():
+            # Use locked file if lock is enabled, otherwise use current file
+            target_file = self.link_locked_file if self.link_scene_lock.isChecked() else self.current_file
+            if target_file and self.link_scene_combo.currentText():
                 per_file_scenes = link_state.get('per_file_scenes', {})
-                per_file_scenes[str(self.current_file)] = self.link_scene_combo.currentText()
+                per_file_scenes[str(target_file)] = self.link_scene_combo.currentText()
                 link_state['per_file_scenes'] = per_file_scenes
 
             # Save source file and collection
@@ -1471,7 +1510,42 @@ class OperationsPanelWidget(QWidget):
 
             # Restore lock state
             scene_lock_enabled = link_state.get('scene_lock_enabled', False)
-            self.link_scene_lock.setChecked(scene_lock_enabled)
+
+            # If lock was enabled, restore the locked file and scene
+            if scene_lock_enabled:
+                locked_file = link_state.get('locked_file')
+                if locked_file and Path(locked_file).exists():
+                    self.link_locked_file = Path(locked_file)
+                    # Update the display to show the locked file
+                    self.link_target_display.setText(f"<b>{self.link_locked_file.name}</b><br><small>{str(self.link_locked_file)}</small>")
+                    self.link_source_browse_btn.setEnabled(True)
+                    # Load scenes for the locked file
+                    try:
+                        blender_service = self.controller.project.blender_service
+                        scenes = blender_service.get_scenes(self.link_locked_file)
+                        self.link_scenes = scenes
+                        self.link_scene_combo.clear()
+                        for scene in scenes:
+                            self.link_scene_combo.addItem(scene["name"])
+                        if scenes:
+                            self.link_scene_combo.setEnabled(True)
+                            # Restore locked scene
+                            locked_scene = link_state.get('locked_scene')
+                            if locked_scene:
+                                index = self.link_scene_combo.findText(locked_scene)
+                                if index >= 0:
+                                    self.link_scene_combo.setCurrentIndex(index)
+                    except Exception as e:
+                        print(f"Warning: Could not load scenes for locked file: {e}")
+
+                    # Now set the lock checkbox (after setting up the file)
+                    self.link_scene_lock.setChecked(True)
+                else:
+                    # Locked file doesn't exist anymore, don't enable lock
+                    scene_lock_enabled = False
+
+            if not scene_lock_enabled:
+                self.link_scene_lock.setChecked(False)
 
             # Restore last source file
             last_source = link_state.get('last_source_file')
@@ -1487,7 +1561,10 @@ class OperationsPanelWidget(QWidget):
 
     def _restore_scene_selection(self):
         """Restore scene selection based on lock state and per-file settings."""
-        if not self.config_file or not self.config_file.exists() or not self.current_file:
+        # Use locked file if lock is enabled, otherwise use current file
+        target_file = self.link_locked_file if self.link_scene_lock.isChecked() else self.current_file
+
+        if not self.config_file or not self.config_file.exists() or not target_file:
             return
 
         try:
@@ -1508,7 +1585,7 @@ class OperationsPanelWidget(QWidget):
 
             # Otherwise, check for per-file scene
             per_file_scenes = link_state.get('per_file_scenes', {})
-            file_scene = per_file_scenes.get(str(self.current_file))
+            file_scene = per_file_scenes.get(str(target_file))
             if file_scene:
                 index = self.link_scene_combo.findText(file_scene)
                 if index >= 0:
