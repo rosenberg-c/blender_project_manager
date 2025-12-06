@@ -509,6 +509,10 @@ class BlenderService:
                 report_progress(30, "Rebasing internal paths in moved .blend files...")
                 script_path = Path(__file__).parent.parent / "blender_lib" / "rebase_blend_paths.py"
 
+                # Create comma-separated list of OLD absolute paths of all moved files
+                # This helps the rebase script know which references should NOT be rebased
+                moved_files_old_paths = ','.join(str(f) for f in files_to_move)
+
                 for i, old_blend_path in enumerate(moved_blend_files):
                     # Calculate new path for this blend file
                     rel_path = old_blend_path.relative_to(old_path)
@@ -524,6 +528,7 @@ class BlenderService:
                             "blend-file": str(new_blend_path),  # File at its new location
                             "old-dir": str(old_blend_path.parent),  # Where it was
                             "new-dir": str(new_blend_path.parent),  # Where it is now
+                            "moved-files": moved_files_old_paths,  # List of all moved files
                             "dry-run": "false"
                         },
                         timeout=120
