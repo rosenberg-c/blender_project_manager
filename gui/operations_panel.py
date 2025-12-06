@@ -1476,6 +1476,16 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.warning(self, "No Items", "No valid items selected.")
             return
 
+        # Check if target collection name conflicts with any selected item names
+        if target_collection in item_names:
+            QMessageBox.warning(
+                self,
+                "Name Conflict",
+                f"The target collection name '{target_collection}' conflicts with one of the selected items.\n\n"
+                f"Please choose a different collection name to avoid naming conflicts in Blender."
+            )
+            return
+
         # Validate selection for instance mode
         if link_mode == 'instance':
             # Count collections in selection

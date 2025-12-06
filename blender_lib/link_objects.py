@@ -57,6 +57,14 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
             elif item_type == 'collection':
                 collections_to_link.append(item_name)
 
+        # Check for naming conflicts with target collection
+        if target_collection_name in item_names:
+            result["errors"].append(
+                f"Target collection name '{target_collection_name}' conflicts with item being linked. "
+                f"Please choose a different collection name."
+            )
+            return result
+
         # Check if target collection exists
         target_collection_exists = target_collection_name in bpy.data.collections
 
