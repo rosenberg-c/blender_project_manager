@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QFileDialog, QMessageBox, QApplication,
-    QTabWidget, QListWidget, QListWidgetItem, QComboBox, QCheckBox
+    QTabWidget, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QRadioButton, QButtonGroup
 )
 from PySide6.QtGui import QCursor
 
@@ -36,6 +36,7 @@ class OperationsPanelWidget(QWidget):
         self.link_source_data = {"objects": [], "collections": []}
         self.link_scenes = []
         self.link_locked_file: Path | None = None  # Track locked target file
+        self.pending_locked_file_restore = None  # Deferred restoration data
 
         self.setup_ui()
         self._restore_link_state()
@@ -346,13 +347,39 @@ class OperationsPanelWidget(QWidget):
         self.link_items_list.setSelectionMode(QListWidget.ExtendedSelection)
         tab_layout.addWidget(self.link_items_list)
 
-        # Target collection
+        tab_layout.addSpacing(5)
+
+        # Link mode selection
+        mode_label = QLabel("<b>Link Mode:</b>")
+        tab_layout.addWidget(mode_label)
+
+        self.link_mode_instance = QRadioButton("Link as collection instance (Blender default)")
+        self.link_mode_instance.setToolTip("Links the collection as a single entity (orange color)")
+        self.link_mode_instance.setChecked(True)
+
+        self.link_mode_individual = QRadioButton("Link individually into collection")
+        self.link_mode_individual.setToolTip("Links each object separately into a target collection")
+
+        self.link_mode_group = QButtonGroup()
+        self.link_mode_group.addButton(self.link_mode_instance, 0)
+        self.link_mode_group.addButton(self.link_mode_individual, 1)
+
+        self.link_mode_instance.toggled.connect(self._on_link_mode_changed)
+
+        tab_layout.addWidget(self.link_mode_instance)
+        tab_layout.addWidget(self.link_mode_individual)
+
+        tab_layout.addSpacing(5)
+
+        # Target collection (only for individual mode)
         collection_label = QLabel("Target collection name:")
         tab_layout.addWidget(collection_label)
 
         self.link_collection_input = QLineEdit()
         self.link_collection_input.setPlaceholderText("Enter collection name (will be created if needed)")
         tab_layout.addWidget(self.link_collection_input)
+
+        self.collection_label = collection_label  # Store reference for enabling/disabling
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -1152,9 +1179,9 @@ class OperationsPanelWidget(QWidget):
             for scene in scenes:
                 self.link_scene_combo.addItem(scene["name"])
 
-            # Enable dropdown if we have scenes
+            # Update scene combo state (considers lock state)
             if scenes:
-                self.link_scene_combo.setEnabled(True)
+                self._update_scene_combo_state()
                 # Restore scene selection
                 self._restore_scene_selection()
 
@@ -1173,6 +1200,31 @@ class OperationsPanelWidget(QWidget):
         """
         # Save scene selection for this file
         self._save_link_state()
+
+    def _on_link_mode_changed(self, checked: bool):
+        """Handle link mode radio button change.
+
+        Args:
+            checked: Whether instance mode is checked
+        """
+        # Enable/disable collection input based on mode
+        if self.link_mode_instance.isChecked():
+            # Instance mode - disable collection input
+            self.collection_label.setEnabled(False)
+            self.link_collection_input.setEnabled(False)
+        else:
+            # Individual mode - enable collection input
+            self.collection_label.setEnabled(True)
+            self.link_collection_input.setEnabled(True)
+
+        # Save the mode preference
+        self._save_link_state()
+
+    def _update_scene_combo_state(self):
+        """Update scene combo enabled state based on lock."""
+        # Disable scene combo when lock is enabled
+        is_locked = self.link_scene_lock.isChecked()
+        self.link_scene_combo.setEnabled(not is_locked and len(self.link_scenes) > 0)
 
     def _on_scene_lock_changed(self, state: int):
         """Handle scene lock checkbox change.
@@ -1201,6 +1253,9 @@ class OperationsPanelWidget(QWidget):
                 self.link_target_display.setText(f"<b>{self.current_file.name}</b><br><small>{str(self.current_file)}</small>")
                 self.link_source_browse_btn.setEnabled(True)
                 self._load_scenes_for_target()
+
+        # Update scene combo state based on lock
+        self._update_scene_combo_state()
 
         # Save lock state
         self._save_link_state()
@@ -1350,10 +1405,13 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.warning(self, "No Selection", "Please select items to link.")
             return
 
-        # Get target collection name
+        # Get link mode
+        link_mode = 'instance' if self.link_mode_instance.isChecked() else 'individual'
+
+        # Get target collection name (only required for individual mode)
         target_collection = self.link_collection_input.text().strip()
-        if not target_collection:
-            QMessageBox.warning(self, "No Collection", "Please enter a target collection name.")
+        if link_mode == 'individual' and not target_collection:
+            QMessageBox.warning(self, "No Collection", "Please enter a target collection name for individual mode.")
             return
 
         # Extract item names and types
@@ -1368,6 +1426,21 @@ class OperationsPanelWidget(QWidget):
         if not item_names:
             QMessageBox.warning(self, "No Items", "No valid items selected.")
             return
+
+        # Validate selection for instance mode
+        if link_mode == 'instance':
+            # Count collections in selection
+            num_collections = sum(1 for t in item_types if t == 'collection')
+            num_objects = sum(1 for t in item_types if t == 'object')
+
+            if num_collections != 1 or num_objects > 0:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Selection",
+                    "Instance mode requires exactly ONE collection to be selected.\n\n"
+                    "Please select a single collection, or switch to 'Individual' mode."
+                )
+                return
 
         # Show loading state
         btn = self.link_preview_btn if dry_run else self.link_execute_btn
@@ -1387,7 +1460,8 @@ class OperationsPanelWidget(QWidget):
                 source_file=Path(source_file),
                 item_names=item_names,
                 item_types=item_types,
-                target_collection=target_collection
+                target_collection=target_collection if target_collection else "",
+                link_mode=link_mode
             )
 
             if dry_run:
@@ -1464,6 +1538,9 @@ class OperationsPanelWidget(QWidget):
             # Get current state
             link_state = config_data.get('link_operation', {})
 
+            # Save link mode
+            link_state['link_mode'] = 'instance' if self.link_mode_instance.isChecked() else 'individual'
+
             # Save lock state
             link_state['scene_lock_enabled'] = self.link_scene_lock.isChecked()
 
@@ -1508,44 +1585,40 @@ class OperationsPanelWidget(QWidget):
 
             link_state = config_data.get('link_operation', {})
 
+            # Restore link mode
+            link_mode = link_state.get('link_mode', 'instance')
+            if link_mode == 'instance':
+                self.link_mode_instance.setChecked(True)
+            else:
+                self.link_mode_individual.setChecked(True)
+
             # Restore lock state
             scene_lock_enabled = link_state.get('scene_lock_enabled', False)
 
             # If lock was enabled, restore the locked file and scene
             if scene_lock_enabled:
                 locked_file = link_state.get('locked_file')
+                locked_scene = link_state.get('locked_scene')
                 if locked_file and Path(locked_file).exists():
-                    self.link_locked_file = Path(locked_file)
-                    # Update the display to show the locked file
-                    self.link_target_display.setText(f"<b>{self.link_locked_file.name}</b><br><small>{str(self.link_locked_file)}</small>")
-                    self.link_source_browse_btn.setEnabled(True)
-                    # Load scenes for the locked file
-                    try:
-                        blender_service = self.controller.project.blender_service
-                        scenes = blender_service.get_scenes(self.link_locked_file)
-                        self.link_scenes = scenes
-                        self.link_scene_combo.clear()
-                        for scene in scenes:
-                            self.link_scene_combo.addItem(scene["name"])
-                        if scenes:
-                            self.link_scene_combo.setEnabled(True)
-                            # Restore locked scene
-                            locked_scene = link_state.get('locked_scene')
-                            if locked_scene:
-                                index = self.link_scene_combo.findText(locked_scene)
-                                if index >= 0:
-                                    self.link_scene_combo.setCurrentIndex(index)
-                    except Exception as e:
-                        print(f"Warning: Could not load scenes for locked file: {e}")
-
-                    # Now set the lock checkbox (after setting up the file)
-                    self.link_scene_lock.setChecked(True)
+                    # Check if project is open (blender_service available)
+                    if self.controller.project.is_open and self.controller.project.blender_service:
+                        # Project is open, restore immediately
+                        self._apply_locked_file_restoration(Path(locked_file), locked_scene)
+                    else:
+                        # Project not open yet, defer restoration
+                        self.pending_locked_file_restore = {
+                            'locked_file': Path(locked_file),
+                            'locked_scene': locked_scene
+                        }
                 else:
                     # Locked file doesn't exist anymore, don't enable lock
                     scene_lock_enabled = False
 
             if not scene_lock_enabled:
+                # Block signals to avoid validation during initialization
+                self.link_scene_lock.blockSignals(True)
                 self.link_scene_lock.setChecked(False)
+                self.link_scene_lock.blockSignals(False)
 
             # Restore last source file
             last_source = link_state.get('last_source_file')
@@ -1593,3 +1666,56 @@ class OperationsPanelWidget(QWidget):
 
         except Exception as e:
             print(f"Warning: Could not restore scene selection: {e}")
+
+    def _apply_locked_file_restoration(self, locked_file: Path, locked_scene: str):
+        """Apply locked file restoration when blender_service is available.
+
+        Args:
+            locked_file: Path to locked .blend file
+            locked_scene: Name of locked scene
+        """
+        try:
+            self.link_locked_file = locked_file
+            # Update the display to show the locked file
+            self.link_target_display.setText(f"<b>{locked_file.name}</b><br><small>{str(locked_file)}</small>")
+            self.link_source_browse_btn.setEnabled(True)
+
+            # Load scenes for the locked file
+            blender_service = self.controller.project.blender_service
+            scenes = blender_service.get_scenes(locked_file)
+            self.link_scenes = scenes
+
+            # Block signals during restoration to avoid saving state while loading
+            self.link_scene_combo.blockSignals(True)
+            self.link_scene_combo.clear()
+            for scene in scenes:
+                self.link_scene_combo.addItem(scene["name"])
+            if scenes:
+                # Restore locked scene
+                if locked_scene:
+                    index = self.link_scene_combo.findText(locked_scene)
+                    if index >= 0:
+                        self.link_scene_combo.setCurrentIndex(index)
+            self.link_scene_combo.blockSignals(False)
+
+            # Block signals while setting checkbox to avoid validation during initialization
+            self.link_scene_lock.blockSignals(True)
+            self.link_scene_lock.setChecked(True)
+            self.link_scene_lock.blockSignals(False)
+
+            # Update scene combo state (will be disabled because lock is checked)
+            self._update_scene_combo_state()
+
+            # Clear pending restoration
+            self.pending_locked_file_restore = None
+
+        except Exception as e:
+            self.link_scene_combo.blockSignals(False)
+            print(f"Warning: Could not apply locked file restoration: {e}")
+
+    def apply_pending_restorations(self):
+        """Apply any pending restorations after project is opened."""
+        if self.pending_locked_file_restore:
+            locked_file = self.pending_locked_file_restore['locked_file']
+            locked_scene = self.pending_locked_file_restore['locked_scene']
+            self._apply_locked_file_restoration(locked_file, locked_scene)

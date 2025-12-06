@@ -188,6 +188,9 @@ class MainWindow(QMainWindow):
             # Restore file browser state (expanded paths and selected file)
             self.file_browser.restore_state()
 
+            # Apply pending restorations in operations panel (e.g., locked file)
+            self.operations_panel.apply_pending_restorations()
+
             # Save as last project
             self.save_last_project(project_root)
 
@@ -268,6 +271,9 @@ class MainWindow(QMainWindow):
 
             # Restore file browser state (expanded paths and selected file)
             self.file_browser.restore_state()
+
+            # Apply pending restorations in operations panel (e.g., locked file)
+            self.operations_panel.apply_pending_restorations()
         else:
             self.status_bar.showMessage("Failed to load last project. Please select a project.")
 

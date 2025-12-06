@@ -85,3 +85,4 @@ class LinkOperationParams:
     item_names: List[str]       # Names of objects/collections to link
     item_types: List[str]        # 'object' or 'collection' for each item
     target_collection: str       # Collection name to create/use in target
+    link_mode: str = 'instance'  # 'instance' (Blender default) or 'individual'

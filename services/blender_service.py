@@ -616,6 +616,7 @@ class BlenderService:
                     "item-names": ",".join(params.item_names),
                     "item-types": ",".join(params.item_types),
                     "target-collection": params.target_collection,
+                    "link-mode": params.link_mode,
                     "dry-run": "true"
                 },
                 timeout=120
@@ -710,6 +711,7 @@ class BlenderService:
                     "item-names": ",".join(params.item_names),
                     "item-types": ",".join(params.item_types),
                     "target-collection": params.target_collection,
+                    "link-mode": params.link_mode,
                     "dry-run": "false"
                 },
                 timeout=180

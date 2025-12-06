@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 
-def link_items(source_file, target_scene, item_names, item_types, target_collection_name, dry_run=True):
+def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True):
     """Link objects/collections from source file into target scene.
 
     Args:
@@ -16,6 +16,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
         item_names: List of item names to link
         item_types: List of types ('object' or 'collection') for each item
         target_collection_name: Name of collection to create/use in target
+        link_mode: 'instance' (Blender default) or 'individual' (separate links)
         dry_run: If True, only preview without making changes
 
     Returns:
@@ -62,45 +63,72 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
         if dry_run:
             # Preview mode - check what would happen
 
-            # Load source file to check what's available
-            with bpy.data.libraries.load(source_file, link=False) as (data_from, data_to):
-                # Check objects
-                for obj_name in objects_to_link:
-                    if obj_name in data_from.objects:
-                        # Check if already exists in target
-                        if obj_name in bpy.data.objects:
-                            result["errors"].append(f"Object '{obj_name}' already exists in target file")
-                        else:
-                            result["linked_items"].append({
-                                "name": obj_name,
-                                "type": "object",
-                                "status": "will_link"
-                            })
-                    else:
-                        result["warnings"].append(f"Object '{obj_name}' not found in source file")
+            if link_mode == 'instance':
+                # Instance mode: Only ONE collection allowed
+                if len(collections_to_link) != 1 or objects_to_link:
+                    result["errors"].append("Instance mode requires exactly one collection to be selected")
+                    return result
 
-                # Check collections
-                for col_name in collections_to_link:
+                col_name = collections_to_link[0]
+
+                # Load source file to check collection
+                with bpy.data.libraries.load(source_file, link=False) as (data_from, data_to):
                     if col_name in data_from.collections:
-                        # Check if already exists in target
                         if col_name in bpy.data.collections:
                             result["errors"].append(f"Collection '{col_name}' already exists in target file")
                         else:
                             result["linked_items"].append({
                                 "name": col_name,
-                                "type": "collection",
+                                "type": "collection_instance",
                                 "status": "will_link"
                             })
                     else:
-                        result["warnings"].append(f"Collection '{col_name}' not found in source file")
+                        result["errors"].append(f"Collection '{col_name}' not found in source file")
 
-            # Check target collection
-            if not target_collection_exists:
-                result["target_collection_status"] = "will_create"
+                result["target_collection_status"] = "not_applicable"
+                result["success"] = len(result["errors"]) == 0
+
             else:
-                result["target_collection_status"] = "exists"
+                # Individual mode: Check all items
+                # Load source file to check what's available
+                with bpy.data.libraries.load(source_file, link=False) as (data_from, data_to):
+                    # Check objects
+                    for obj_name in objects_to_link:
+                        if obj_name in data_from.objects:
+                            # Check if already exists in target
+                            if obj_name in bpy.data.objects:
+                                result["errors"].append(f"Object '{obj_name}' already exists in target file")
+                            else:
+                                result["linked_items"].append({
+                                    "name": obj_name,
+                                    "type": "object",
+                                    "status": "will_link"
+                                })
+                        else:
+                            result["warnings"].append(f"Object '{obj_name}' not found in source file")
 
-            result["success"] = len(result["errors"]) == 0
+                    # Check collections
+                    for col_name in collections_to_link:
+                        if col_name in data_from.collections:
+                            # Check if already exists in target
+                            if col_name in bpy.data.collections:
+                                result["errors"].append(f"Collection '{col_name}' already exists in target file")
+                            else:
+                                result["linked_items"].append({
+                                    "name": col_name,
+                                    "type": "collection",
+                                    "status": "will_link"
+                                })
+                        else:
+                            result["warnings"].append(f"Collection '{col_name}' not found in source file")
+
+                # Check target collection
+                if not target_collection_exists:
+                    result["target_collection_status"] = "will_create"
+                else:
+                    result["target_collection_status"] = "exists"
+
+                result["success"] = len(result["errors"]) == 0
 
         else:
             # Execute mode - actually link the items
@@ -109,74 +137,115 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
             if result["errors"]:
                 return result
 
-            # Link objects and collections from source
-            linked_objects = []
-            linked_collections = []
+            if link_mode == 'instance':
+                # Instance mode: Link collection as collection instance (Blender default)
+                # This mode only supports linking ONE collection
+                if len(collections_to_link) != 1 or objects_to_link:
+                    result["errors"].append("Instance mode requires exactly one collection to be selected")
+                    return result
 
-            with bpy.data.libraries.load(source_file, link=True) as (data_from, data_to):
-                # Link objects
-                for obj_name in objects_to_link:
-                    if obj_name in data_from.objects:
-                        # Check for duplicates
-                        if obj_name in bpy.data.objects:
-                            result["errors"].append(f"Object '{obj_name}' already exists in target file")
-                        else:
-                            data_to.objects = [obj for obj in data_from.objects if obj == obj_name]
-                    else:
-                        result["warnings"].append(f"Object '{obj_name}' not found in source file")
+                col_name = collections_to_link[0]
 
-                # Link collections
-                for col_name in collections_to_link:
+                # Link the collection
+                with bpy.data.libraries.load(source_file, link=True) as (data_from, data_to):
                     if col_name in data_from.collections:
-                        # Check for duplicates
                         if col_name in bpy.data.collections:
                             result["errors"].append(f"Collection '{col_name}' already exists in target file")
-                        else:
-                            data_to.collections = [col for col in data_from.collections if col == col_name]
+                            return result
+                        data_to.collections = [col for col in data_from.collections if col == col_name]
                     else:
-                        result["warnings"].append(f"Collection '{col_name}' not found in source file")
+                        result["errors"].append(f"Collection '{col_name}' not found in source file")
+                        return result
 
-            # If there were duplicate errors, don't continue
-            if result["errors"]:
-                return result
+                # Get the linked collection
+                linked_collection = bpy.data.collections.get(col_name)
+                if not linked_collection:
+                    result["errors"].append(f"Failed to link collection '{col_name}'")
+                    return result
 
-            # After loading, linked items are in bpy.data but need to be added to scene
-            linked_objects = [obj for obj in bpy.data.objects if obj.name in objects_to_link and obj.library]
-            linked_collections = [col for col in bpy.data.collections if col.name in collections_to_link and col.library]
+                # Create a collection instance in the scene
+                # This is done by linking the collection to the scene
+                bpy.context.scene.collection.children.link(linked_collection)
 
-            # Create or get target collection
-            if target_collection_name not in bpy.data.collections:
-                target_collection = bpy.data.collections.new(target_collection_name)
-                bpy.context.scene.collection.children.link(target_collection)
-                result["target_collection_status"] = "created"
+                result["linked_items"].append({
+                    "name": col_name,
+                    "type": "collection_instance",
+                    "status": "linked"
+                })
+
+                # Save the file
+                bpy.ops.wm.save_mainfile()
+                result["success"] = True
+
             else:
-                target_collection = bpy.data.collections[target_collection_name]
-                result["target_collection_status"] = "existed"
+                # Individual mode: Link each item separately into a target collection
+                linked_objects = []
+                linked_collections = []
 
-            # Add linked objects directly to target collection
-            for obj in linked_objects:
-                if obj.name not in target_collection.objects:
-                    target_collection.objects.link(obj)
-                    result["linked_items"].append({
-                        "name": obj.name,
-                        "type": "object",
-                        "status": "linked"
-                    })
+                with bpy.data.libraries.load(source_file, link=True) as (data_from, data_to):
+                    # Link objects
+                    for obj_name in objects_to_link:
+                        if obj_name in data_from.objects:
+                            # Check for duplicates
+                            if obj_name in bpy.data.objects:
+                                result["errors"].append(f"Object '{obj_name}' already exists in target file")
+                            else:
+                                data_to.objects = [obj for obj in data_from.objects if obj == obj_name]
+                        else:
+                            result["warnings"].append(f"Object '{obj_name}' not found in source file")
 
-            # Add linked collections directly to target collection
-            for col in linked_collections:
-                if col.name not in [c.name for c in target_collection.children]:
-                    target_collection.children.link(col)
-                    result["linked_items"].append({
-                        "name": col.name,
-                        "type": "collection",
-                        "status": "linked"
-                    })
+                    # Link collections
+                    for col_name in collections_to_link:
+                        if col_name in data_from.collections:
+                            # Check for duplicates
+                            if col_name in bpy.data.collections:
+                                result["errors"].append(f"Collection '{col_name}' already exists in target file")
+                            else:
+                                data_to.collections = [col for col in data_from.collections if col == col_name]
+                        else:
+                            result["warnings"].append(f"Collection '{col_name}' not found in source file")
 
-            # Save the file
-            bpy.ops.wm.save_mainfile()
+                # If there were duplicate errors, don't continue
+                if result["errors"]:
+                    return result
 
-            result["success"] = len(result["errors"]) == 0
+                # After loading, linked items are in bpy.data but need to be added to scene
+                linked_objects = [obj for obj in bpy.data.objects if obj.name in objects_to_link and obj.library]
+                linked_collections = [col for col in bpy.data.collections if col.name in collections_to_link and col.library]
+
+                # Create or get target collection
+                if target_collection_name not in bpy.data.collections:
+                    target_collection = bpy.data.collections.new(target_collection_name)
+                    bpy.context.scene.collection.children.link(target_collection)
+                    result["target_collection_status"] = "created"
+                else:
+                    target_collection = bpy.data.collections[target_collection_name]
+                    result["target_collection_status"] = "existed"
+
+                # Add linked objects directly to target collection
+                for obj in linked_objects:
+                    if obj.name not in target_collection.objects:
+                        target_collection.objects.link(obj)
+                        result["linked_items"].append({
+                            "name": obj.name,
+                            "type": "object",
+                            "status": "linked"
+                        })
+
+                # Add linked collections directly to target collection
+                for col in linked_collections:
+                    if col.name not in [c.name for c in target_collection.children]:
+                        target_collection.children.link(col)
+                        result["linked_items"].append({
+                            "name": col.name,
+                            "type": "collection",
+                            "status": "linked"
+                        })
+
+                # Save the file
+                bpy.ops.wm.save_mainfile()
+
+                result["success"] = len(result["errors"]) == 0
 
     except Exception as e:
         result["errors"].append(f"Unexpected error: {str(e)}")
@@ -195,6 +264,7 @@ if __name__ == "__main__":
         parser.add_argument('--item-names', required=True, help='Comma-separated list of item names')
         parser.add_argument('--item-types', required=True, help='Comma-separated list of item types')
         parser.add_argument('--target-collection', required=True, help='Target collection name')
+        parser.add_argument('--link-mode', default='instance', help='instance or individual')
         parser.add_argument('--dry-run', default='true', help='true or false')
 
         # Get args after the '--' separator
@@ -214,6 +284,9 @@ if __name__ == "__main__":
         # Parse dry-run flag
         dry_run = args.dry_run.lower() == 'true'
 
+        # Parse link mode
+        link_mode = args.link_mode.lower()
+
         # Execute link operation
         result = link_items(
             args.source_file,
@@ -221,6 +294,7 @@ if __name__ == "__main__":
             item_names,
             item_types,
             args.target_collection,
+            link_mode,
             dry_run
         )
 
