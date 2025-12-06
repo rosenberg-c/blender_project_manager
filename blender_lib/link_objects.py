@@ -70,12 +70,17 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     return result
 
                 col_name = collections_to_link[0]
+                instance_name = f"{col_name}_instance"
 
                 # Load source file to check collection
                 with bpy.data.libraries.load(source_file, link=False) as (data_from, data_to):
                     if col_name in data_from.collections:
+                        # Check if collection already linked
                         if col_name in bpy.data.collections:
                             result["errors"].append(f"Collection '{col_name}' already exists in target file")
+                        # Check if instance object already exists
+                        elif instance_name in bpy.data.objects:
+                            result["errors"].append(f"Collection instance '{instance_name}' already exists in target file")
                         else:
                             result["linked_items"].append({
                                 "name": col_name,
@@ -85,7 +90,12 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     else:
                         result["errors"].append(f"Collection '{col_name}' not found in source file")
 
-                result["target_collection_status"] = "not_applicable"
+                # Check target collection
+                if target_collection_name not in bpy.data.collections:
+                    result["target_collection_status"] = "will_create"
+                else:
+                    result["target_collection_status"] = "exists"
+
                 result["success"] = len(result["errors"]) == 0
 
             else:
@@ -145,13 +155,20 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     return result
 
                 col_name = collections_to_link[0]
+                instance_name = f"{col_name}_instance"
+
+                # Check for duplicates before linking
+                if col_name in bpy.data.collections:
+                    result["errors"].append(f"Collection '{col_name}' already exists in target file")
+                    return result
+
+                if instance_name in bpy.data.objects:
+                    result["errors"].append(f"Collection instance '{instance_name}' already exists in target file")
+                    return result
 
                 # Link the collection
                 with bpy.data.libraries.load(source_file, link=True) as (data_from, data_to):
                     if col_name in data_from.collections:
-                        if col_name in bpy.data.collections:
-                            result["errors"].append(f"Collection '{col_name}' already exists in target file")
-                            return result
                         data_to.collections = [col for col in data_from.collections if col == col_name]
                     else:
                         result["errors"].append(f"Collection '{col_name}' not found in source file")
@@ -163,9 +180,28 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     result["errors"].append(f"Failed to link collection '{col_name}'")
                     return result
 
-                # Create a collection instance in the scene
-                # This is done by linking the collection to the scene
-                bpy.context.scene.collection.children.link(linked_collection)
+                # Create or get target collection
+                if target_collection_name not in bpy.data.collections:
+                    target_collection = bpy.data.collections.new(target_collection_name)
+                    bpy.context.scene.collection.children.link(target_collection)
+                    result["target_collection_status"] = "created"
+                else:
+                    target_collection = bpy.data.collections[target_collection_name]
+                    result["target_collection_status"] = "existed"
+
+                # Create a collection instance (Empty object that instances the collection)
+                # This creates the orange "instance" behavior in Blender
+                instance_name = f"{col_name}_instance"
+
+                # Create an empty object
+                empty = bpy.data.objects.new(instance_name, None)
+
+                # Set it to instance the linked collection
+                empty.instance_type = 'COLLECTION'
+                empty.instance_collection = linked_collection
+
+                # Add the empty to the target collection (not scene root)
+                target_collection.objects.link(empty)
 
                 result["linked_items"].append({
                     "name": col_name,

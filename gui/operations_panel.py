@@ -347,11 +347,11 @@ class OperationsPanelWidget(QWidget):
         tab_layout.addWidget(mode_label)
 
         self.link_mode_instance = QRadioButton("Link as collection instance (Blender default)")
-        self.link_mode_instance.setToolTip("Links the collection as a single entity (orange color)")
+        self.link_mode_instance.setToolTip("Creates a collection instance (orange) inside the target collection")
         self.link_mode_instance.setChecked(True)
 
         self.link_mode_individual = QRadioButton("Link individually into collection")
-        self.link_mode_individual.setToolTip("Links each object separately into a target collection")
+        self.link_mode_individual.setToolTip("Links each object/collection separately into the target collection")
 
         self.link_mode_group = QButtonGroup()
         self.link_mode_group.addButton(self.link_mode_instance, 0)
@@ -364,12 +364,12 @@ class OperationsPanelWidget(QWidget):
 
         tab_layout.addSpacing(5)
 
-        # Target collection (only for individual mode)
+        # Target collection (for both modes)
         collection_label = QLabel("Target collection name:")
         tab_layout.addWidget(collection_label)
 
         self.link_collection_input = QLineEdit()
-        self.link_collection_input.setPlaceholderText("Enter collection name (will be created if needed)")
+        self.link_collection_input.setPlaceholderText("Collection to place linked items (created if needed)")
         tab_layout.addWidget(self.link_collection_input)
 
         self.collection_label = collection_label  # Store reference for enabling/disabling
@@ -1217,15 +1217,9 @@ class OperationsPanelWidget(QWidget):
         Args:
             checked: Whether instance mode is checked
         """
-        # Enable/disable collection input based on mode
-        if self.link_mode_instance.isChecked():
-            # Instance mode - disable collection input
-            self.collection_label.setEnabled(False)
-            self.link_collection_input.setEnabled(False)
-        else:
-            # Individual mode - enable collection input
-            self.collection_label.setEnabled(True)
-            self.link_collection_input.setEnabled(True)
+        # Collection input is now required for both modes
+        self.collection_label.setEnabled(True)
+        self.link_collection_input.setEnabled(True)
 
         # Save the mode preference
         self._save_link_state()
@@ -1393,10 +1387,10 @@ class OperationsPanelWidget(QWidget):
         # Get link mode
         link_mode = 'instance' if self.link_mode_instance.isChecked() else 'individual'
 
-        # Get target collection name (only required for individual mode)
+        # Get target collection name (required for both modes)
         target_collection = self.link_collection_input.text().strip()
-        if link_mode == 'individual' and not target_collection:
-            QMessageBox.warning(self, "No Collection", "Please enter a target collection name for individual mode.")
+        if not target_collection:
+            QMessageBox.warning(self, "No Collection", "Please enter a target collection name.")
             return
 
         # Extract item names and types
