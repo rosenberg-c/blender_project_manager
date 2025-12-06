@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from blender_lib.blender_runner import BlenderRunner
-from blender_lib.models import OperationPreview, OperationResult, PathChange
+from blender_lib.models import OperationPreview, OperationResult, PathChange, LinkOperationParams
 from services.filesystem_service import FilesystemService
 
 
@@ -534,3 +534,218 @@ class BlenderService:
         except Exception as e:
             print(f"Warning: Failed to update {blend_path}: {e}")
             return 0
+
+    def get_scenes(self, blend_file: Path) -> List[dict]:
+        """Get list of scenes in a .blend file.
+
+        Args:
+            blend_file: Path to .blend file
+
+        Returns:
+            List of scene dictionaries with 'name' and 'is_active' keys
+
+        Raises:
+            Exception: If scenes cannot be loaded
+        """
+        try:
+            script_path = Path(__file__).parent.parent / "blender_lib" / "list_scenes.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {"blend-file": str(blend_file)},
+                timeout=60
+            )
+
+            data = extract_json_from_output(result.stdout)
+
+            if "error" in data and data["error"]:
+                raise Exception(data["error"])
+
+            return data.get("scenes", [])
+
+        except Exception as e:
+            raise Exception(f"Failed to get scenes from {blend_file.name}: {str(e)}")
+
+    def preview_link_operation(self, params: LinkOperationParams) -> OperationPreview:
+        """Preview what will happen when linking objects/collections.
+
+        Args:
+            params: Link operation parameters
+
+        Returns:
+            OperationPreview with list of changes
+        """
+        changes = []
+        warnings = []
+        errors = []
+
+        # Validation
+        if not params.target_file.exists():
+            errors.append(f"Target file does not exist: {params.target_file}")
+
+        if not params.source_file.exists():
+            errors.append(f"Source file does not exist: {params.source_file}")
+
+        if not params.item_names:
+            errors.append("No items selected to link")
+
+        if len(params.item_names) != len(params.item_types):
+            errors.append("Item names and types count mismatch")
+
+        if not params.target_collection:
+            errors.append("Target collection name is required")
+
+        if errors:
+            return OperationPreview(
+                operation_name="Link Objects/Collections",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        # Run dry-run link operation
+        try:
+            script_path = Path(__file__).parent.parent / "blender_lib" / "link_objects.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "target-file": str(params.target_file),
+                    "target-scene": params.target_scene,
+                    "source-file": str(params.source_file),
+                    "item-names": ",".join(params.item_names),
+                    "item-types": ",".join(params.item_types),
+                    "target-collection": params.target_collection,
+                    "dry-run": "true"
+                },
+                timeout=120
+            )
+
+            link_result = extract_json_from_output(result.stdout)
+
+            # Convert to PathChange objects for preview dialog
+            for item in link_result.get("linked_items", []):
+                changes.append(PathChange(
+                    file_path=params.target_file,
+                    item_type=f"link_{item['type']}",
+                    item_name=item["name"],
+                    old_path=str(params.source_file),
+                    new_path=f"{params.target_scene} → {params.target_collection}",
+                    status='ok'
+                ))
+
+            # Add warnings and errors from Blender script
+            warnings.extend(link_result.get("warnings", []))
+            errors.extend(link_result.get("errors", []))
+
+            # Add info about target collection
+            collection_status = link_result.get("target_collection_status", "")
+            if collection_status == "will_create":
+                warnings.append(f"Collection '{params.target_collection}' will be created")
+
+        except Exception as e:
+            errors.append(f"Preview failed: {str(e)}")
+
+        return OperationPreview(
+            operation_name=f"Link to {params.target_file.name}",
+            changes=changes,
+            warnings=warnings,
+            errors=errors
+        )
+
+    def execute_link_operation(
+        self,
+        params: LinkOperationParams,
+        progress_callback: Optional[Callable[[int, str], None]] = None
+    ) -> OperationResult:
+        """Execute linking objects/collections from source to target file.
+
+        Args:
+            params: Link operation parameters
+            progress_callback: Optional callback(percentage, message)
+
+        Returns:
+            OperationResult with success status
+        """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
+        try:
+            report_progress(0, "Starting link operation...")
+
+            # Validation
+            if not params.target_file.exists():
+                return OperationResult(
+                    success=False,
+                    message=f"Target file does not exist: {params.target_file}",
+                    errors=["Target file not found"]
+                )
+
+            if not params.source_file.exists():
+                return OperationResult(
+                    success=False,
+                    message=f"Source file does not exist: {params.source_file}",
+                    errors=["Source file not found"]
+                )
+
+            if not params.item_names:
+                return OperationResult(
+                    success=False,
+                    message="No items selected to link",
+                    errors=["No items selected"]
+                )
+
+            report_progress(20, f"Linking {len(params.item_names)} item(s)...")
+
+            # Execute link operation
+            script_path = Path(__file__).parent.parent / "blender_lib" / "link_objects.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "target-file": str(params.target_file),
+                    "target-scene": params.target_scene,
+                    "source-file": str(params.source_file),
+                    "item-names": ",".join(params.item_names),
+                    "item-types": ",".join(params.item_types),
+                    "target-collection": params.target_collection,
+                    "dry-run": "false"
+                },
+                timeout=180
+            )
+
+            link_result = extract_json_from_output(result.stdout)
+
+            report_progress(100, "Complete!")
+
+            if not link_result.get("success", False):
+                errors = link_result.get("errors", ["Unknown error"])
+                return OperationResult(
+                    success=False,
+                    message=f"Link operation failed: {errors[0]}",
+                    errors=errors
+                )
+
+            # Build success message
+            linked_items = link_result.get("linked_items", [])
+            warnings = link_result.get("warnings", [])
+
+            message = f"Successfully linked {len(linked_items)} item(s) to {params.target_file.name}"
+            if warnings:
+                message += f" (with {len(warnings)} warning(s))"
+
+            return OperationResult(
+                success=True,
+                message=message,
+                changes_made=len(linked_items),
+                errors=link_result.get("errors", [])
+            )
+
+        except Exception as e:
+            report_progress(0, "Operation failed")
+            return OperationResult(
+                success=False,
+                message=f"Operation failed: {str(e)}",
+                errors=[str(e)]
+            )

@@ -69,7 +69,7 @@ class MainWindow(QMainWindow):
         self.splitter.addWidget(self.file_browser)
 
         # Right: Operations panel
-        self.operations_panel = OperationsPanelWidget(self.file_ops_controller)
+        self.operations_panel = OperationsPanelWidget(self.file_ops_controller, self.config_file)
         self.splitter.addWidget(self.operations_panel)
 
         # Set initial sizes (2:1 ratio)

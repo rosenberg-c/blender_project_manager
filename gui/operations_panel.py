@@ -1,5 +1,6 @@
 """Operations panel for file operations."""
 
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -19,19 +20,24 @@ from gui.theme import Theme
 class OperationsPanelWidget(QWidget):
     """Panel for configuring and executing file operations."""
 
-    def __init__(self, controller: FileOperationsController, parent=None):
+    def __init__(self, controller: FileOperationsController, config_file: Path = None, parent=None):
         """Initialize operations panel.
 
         Args:
             controller: File operations controller
+            config_file: Path to config file for state persistence
             parent: Parent widget
         """
         super().__init__(parent)
         self.controller = controller
+        self.config_file = config_file
         self.current_file: Path | None = None
         self.obj_list_data = {"objects": [], "collections": []}
+        self.link_source_data = {"objects": [], "collections": []}
+        self.link_scenes = []
 
         self.setup_ui()
+        self._restore_link_state()
 
     def setup_ui(self):
         """Create UI layout."""
@@ -61,6 +67,7 @@ class OperationsPanelWidget(QWidget):
         self.create_move_tab()
         self.create_rename_objects_tab()
         self.create_rename_texture_tab()
+        self.create_link_tab()
 
     def create_move_tab(self):
         """Create the Move/Rename file tab."""
@@ -256,6 +263,119 @@ class OperationsPanelWidget(QWidget):
         # Add tab to tabs widget
         self.tabs.addTab(tab, "Rename Texture")
 
+    def create_link_tab(self):
+        """Create the Link Objects/Collections tab."""
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+
+        info_label = QLabel("<b>Link Objects/Collections:</b>")
+        tab_layout.addWidget(info_label)
+
+        desc_label = QLabel("Link objects/collections from another .blend file into this file.")
+        desc_label.setWordWrap(True)
+        tab_layout.addWidget(desc_label)
+
+        tab_layout.addSpacing(10)
+
+        # TARGET SECTION
+        target_section_label = QLabel("<b>Target (Link into):</b>")
+        tab_layout.addWidget(target_section_label)
+
+        # Target file display
+        target_file_label = QLabel("Target file:")
+        tab_layout.addWidget(target_file_label)
+
+        self.link_target_display = QLabel("<i>No .blend file selected</i>")
+        self.link_target_display.setWordWrap(True)
+        self.link_target_display.setStyleSheet(Theme.get_file_display_style())
+        tab_layout.addWidget(self.link_target_display)
+
+        # Scene selection with lock
+        scene_layout = QHBoxLayout()
+        scene_label = QLabel("Scene:")
+        scene_layout.addWidget(scene_label)
+
+        self.link_scene_combo = QComboBox()
+        self.link_scene_combo.setEnabled(False)
+        self.link_scene_combo.currentTextChanged.connect(self._on_scene_changed)
+        scene_layout.addWidget(self.link_scene_combo, stretch=1)
+
+        self.link_scene_lock = QCheckBox("🔒 Lock")
+        self.link_scene_lock.setToolTip("Lock scene selection to prevent it from changing when switching files")
+        self.link_scene_lock.stateChanged.connect(self._on_scene_lock_changed)
+        scene_layout.addWidget(self.link_scene_lock)
+
+        tab_layout.addLayout(scene_layout)
+
+        tab_layout.addSpacing(10)
+
+        # SOURCE SECTION
+        source_section_label = QLabel("<b>Source (Link from):</b>")
+        tab_layout.addWidget(source_section_label)
+
+        # Source file selection
+        source_file_label = QLabel("From file:")
+        tab_layout.addWidget(source_file_label)
+
+        source_file_layout = QHBoxLayout()
+
+        self.link_source_input = QLineEdit()
+        self.link_source_input.setPlaceholderText("Select source .blend file...")
+        self.link_source_input.setReadOnly(True)
+        source_file_layout.addWidget(self.link_source_input, stretch=1)
+
+        self.link_source_browse_btn = QPushButton("Browse...")
+        self.link_source_browse_btn.setEnabled(False)
+        self.link_source_browse_btn.clicked.connect(self._browse_source_file)
+        source_file_layout.addWidget(self.link_source_browse_btn)
+
+        tab_layout.addLayout(source_file_layout)
+
+        # Load items button
+        self.link_load_btn = QPushButton("Load Objects/Collections")
+        self.link_load_btn.setEnabled(False)
+        self.link_load_btn.clicked.connect(self._load_link_source)
+        tab_layout.addWidget(self.link_load_btn)
+
+        # Items list
+        items_label = QLabel("Select items to link:")
+        tab_layout.addWidget(items_label)
+
+        self.link_items_list = QListWidget()
+        self.link_items_list.setSelectionMode(QListWidget.ExtendedSelection)
+        tab_layout.addWidget(self.link_items_list)
+
+        # Target collection
+        collection_label = QLabel("Target collection name:")
+        tab_layout.addWidget(collection_label)
+
+        self.link_collection_input = QLineEdit()
+        self.link_collection_input.setPlaceholderText("Enter collection name (will be created if needed)")
+        tab_layout.addWidget(self.link_collection_input)
+
+        # Buttons
+        btn_row = QHBoxLayout()
+
+        self.link_preview_btn = QPushButton("Preview Link")
+        self.link_preview_btn.setEnabled(False)
+        self.link_preview_btn.setProperty("class", "info")
+        self.link_preview_btn.clicked.connect(self._preview_link)
+        btn_row.addWidget(self.link_preview_btn)
+
+        tab_layout.addLayout(btn_row)
+
+        self.link_execute_btn = QPushButton("Execute Link")
+        self.link_execute_btn.setEnabled(False)
+        self.link_execute_btn.setProperty("class", "primary")
+        self.link_execute_btn.clicked.connect(self._execute_link)
+        tab_layout.addWidget(self.link_execute_btn)
+
+        # Add stretch
+        tab_layout.addStretch()
+
+        # Add tab to tabs widget
+        self.tabs.addTab(tab, "Link Objects")
+
     def set_file(self, file_path: Path):
         """Set the currently selected file.
 
@@ -301,6 +421,23 @@ class OperationsPanelWidget(QWidget):
             self.tex_browse_btn.setEnabled(False)
             self.tex_preview_btn.setEnabled(False)
             self.tex_execute_btn.setEnabled(False)
+
+        # Update Link tab (only for .blend files)
+        if is_blend:
+            self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
+            self.link_source_browse_btn.setEnabled(True)
+            self._load_scenes_for_target()
+        else:
+            self.link_target_display.setText("<i>No .blend file selected</i>")
+            self.link_scene_combo.clear()
+            self.link_scene_combo.setEnabled(False)
+            self.link_source_browse_btn.setEnabled(False)
+            self.link_load_btn.setEnabled(False)
+            self.link_preview_btn.setEnabled(False)
+            self.link_execute_btn.setEnabled(False)
+            self.link_source_input.clear()
+            self.link_items_list.clear()
+            self.link_source_data = {"objects": [], "collections": []}
 
     def _load_objects(self):
         """Load objects and collections from the selected .blend file."""
@@ -987,3 +1124,395 @@ class OperationsPanelWidget(QWidget):
                 "Error",
                 f"Operation failed:\n\n{str(e)}"
             )
+
+    def _load_scenes_for_target(self):
+        """Load scenes from the target .blend file."""
+        if not self.current_file or self.current_file.suffix != '.blend':
+            return
+
+        try:
+            # Get scenes from Blender service
+            blender_service = self.controller.project.blender_service
+            scenes = blender_service.get_scenes(self.current_file)
+
+            self.link_scenes = scenes
+            self.link_scene_combo.clear()
+
+            # Populate dropdown
+            for scene in scenes:
+                self.link_scene_combo.addItem(scene["name"])
+
+            # Enable dropdown if we have scenes
+            if scenes:
+                self.link_scene_combo.setEnabled(True)
+                # Restore scene selection
+                self._restore_scene_selection()
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Load Scenes Error",
+                f"Failed to load scenes:\n\n{str(e)}"
+            )
+
+    def _on_scene_changed(self, scene_name: str):
+        """Handle scene selection change.
+
+        Args:
+            scene_name: Name of selected scene
+        """
+        # Save scene selection for this file
+        self._save_link_state()
+
+    def _on_scene_lock_changed(self, state: int):
+        """Handle scene lock checkbox change.
+
+        Args:
+            state: Checkbox state
+        """
+        # Save lock state
+        self._save_link_state()
+
+    def _browse_source_file(self):
+        """Browse for source .blend file."""
+        if not self.current_file:
+            return
+
+        # Start from project root
+        start_dir = str(self.controller.project.project_root)
+
+        source_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Source .blend File",
+            start_dir,
+            "Blender Files (*.blend)"
+        )
+
+        if source_file:
+            self.link_source_input.setText(source_file)
+            self.link_load_btn.setEnabled(True)
+            # Clear previous data
+            self.link_items_list.clear()
+            self.link_source_data = {"objects": [], "collections": []}
+
+    def _load_link_source(self):
+        """Load objects and collections from the source .blend file."""
+        source_file = self.link_source_input.text().strip()
+        if not source_file:
+            return
+
+        source_path = Path(source_file)
+        if not source_path.exists():
+            QMessageBox.warning(self, "File Not Found", f"Source file not found: {source_file}")
+            return
+
+        # Show loading state
+        self.link_load_btn.setText("Loading...")
+        self.link_load_btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        QApplication.processEvents()
+
+        try:
+            # Use the same list_objects.py script
+            runner = self.controller.project.blender_service.runner
+            script_path = Path(__file__).parent.parent / "blender_lib" / "list_objects.py"
+
+            result = runner.run_script(
+                script_path,
+                {"blend-file": str(source_path)},
+                timeout=60
+            )
+
+            # Parse JSON output
+            from services.blender_service import extract_json_from_output
+            data = extract_json_from_output(result.stdout)
+
+            if "error" in data and data["error"]:
+                raise Exception(data["error"])
+
+            # Store the data
+            self.link_source_data = data
+
+            # Populate the list
+            self.link_items_list.clear()
+
+            # Add objects
+            for obj in data.get("objects", []):
+                item_text = f"🔷 {obj.get('name', 'Unknown')} ({obj.get('type', 'Unknown')})"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.UserRole, {"type": "object", "data": obj})
+                self.link_items_list.addItem(item)
+
+            # Add collections
+            for col in data.get("collections", []):
+                item_text = f"📁 {col.get('name', 'Unknown')} ({col.get('objects_count', 0)} objects)"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.UserRole, {"type": "collection", "data": col})
+                self.link_items_list.addItem(item)
+
+            # Enable preview and execute buttons
+            self.link_preview_btn.setEnabled(True)
+            self.link_execute_btn.setEnabled(True)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Load Error",
+                f"Failed to load objects/collections:\n\n{str(e)}"
+            )
+        finally:
+            # Restore state
+            QApplication.restoreOverrideCursor()
+            self.link_load_btn.setText("Load Objects/Collections")
+            self.link_load_btn.setEnabled(True)
+
+    def _preview_link(self):
+        """Preview the link operation."""
+        self._link_internal(dry_run=True)
+
+    def _execute_link(self):
+        """Execute the link operation."""
+        # Confirm with user
+        reply = QMessageBox.question(
+            self,
+            "Confirm Link",
+            "This will link the selected objects/collections into the target .blend file.\n\n"
+            "Are you sure you want to continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        self._link_internal(dry_run=False)
+
+    def _link_internal(self, dry_run=True):
+        """Internal method to handle link preview/execute.
+
+        Args:
+            dry_run: If True, only preview changes
+        """
+        if not self.current_file or self.current_file.suffix != '.blend':
+            QMessageBox.warning(self, "No File", "Please select a .blend file as target.")
+            return
+
+        # Get selected scene
+        target_scene = self.link_scene_combo.currentText()
+        if not target_scene:
+            QMessageBox.warning(self, "No Scene", "Please select a target scene.")
+            return
+
+        # Get source file
+        source_file = self.link_source_input.text().strip()
+        if not source_file or not Path(source_file).exists():
+            QMessageBox.warning(self, "No Source", "Please select a valid source .blend file.")
+            return
+
+        # Get selected items
+        selected_items = self.link_items_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select items to link.")
+            return
+
+        # Get target collection name
+        target_collection = self.link_collection_input.text().strip()
+        if not target_collection:
+            QMessageBox.warning(self, "No Collection", "Please enter a target collection name.")
+            return
+
+        # Extract item names and types
+        item_names = []
+        item_types = []
+        for item in selected_items:
+            item_data = item.data(Qt.UserRole)
+            if item_data and "data" in item_data:
+                item_names.append(item_data["data"].get("name", ""))
+                item_types.append(item_data["type"])  # 'object' or 'collection'
+
+        if not item_names:
+            QMessageBox.warning(self, "No Items", "No valid items selected.")
+            return
+
+        # Show loading state
+        btn = self.link_preview_btn if dry_run else self.link_execute_btn
+        original_text = btn.text()
+        btn.setText("Processing..." if dry_run else "Executing...")
+        btn.setEnabled(False)
+        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+        QApplication.processEvents()
+
+        try:
+            from blender_lib.models import LinkOperationParams
+
+            # Create operation parameters
+            params = LinkOperationParams(
+                target_file=self.current_file,
+                target_scene=target_scene,
+                source_file=Path(source_file),
+                item_names=item_names,
+                item_types=item_types,
+                target_collection=target_collection
+            )
+
+            if dry_run:
+                # Preview mode
+                preview = self.controller.project.blender_service.preview_link_operation(params)
+
+                QApplication.restoreOverrideCursor()
+
+                if preview.errors:
+                    error_msg = "<b>Cannot link due to errors:</b><br>"
+                    for error in preview.errors:
+                        error_msg += f"  • {error}<br>"
+
+                    QMessageBox.critical(self, "Link Errors", error_msg)
+                else:
+                    # Show preview dialog
+                    dialog = OperationPreviewDialog(preview, self)
+                    dialog.exec()
+
+            else:
+                # Execute mode
+                result = self.controller.project.blender_service.execute_link_operation(params)
+
+                QApplication.restoreOverrideCursor()
+
+                if result.success:
+                    QMessageBox.information(
+                        self,
+                        "Link Complete",
+                        f"{result.message}\n\n{result.changes_made} item(s) linked."
+                    )
+
+                    # Clear selection
+                    self.link_items_list.clearSelection()
+                else:
+                    error_msg = f"<b>Link operation failed:</b><br>{result.message}<br>"
+                    if result.errors:
+                        error_msg += "<br><b>Errors:</b><br>"
+                        for error in result.errors:
+                            error_msg += f"  • {error}<br>"
+
+                    QMessageBox.critical(self, "Link Failed", error_msg)
+
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print("=== Link Error ===")
+            print(error_details)
+
+            QApplication.restoreOverrideCursor()
+
+            QMessageBox.critical(
+                self,
+                "Link Error",
+                f"Failed to link items:\n\n{str(e)}"
+            )
+        finally:
+            # Restore state
+            btn.setText(original_text)
+            btn.setEnabled(True)
+
+    def _save_link_state(self):
+        """Save link operation state to config file."""
+        if not self.config_file:
+            return
+
+        try:
+            # Load existing config
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            # Get current state
+            link_state = config_data.get('link_operation', {})
+
+            # Save lock state
+            link_state['scene_lock_enabled'] = self.link_scene_lock.isChecked()
+
+            # If lock is enabled, save the locked scene
+            if self.link_scene_lock.isChecked():
+                link_state['locked_scene'] = self.link_scene_combo.currentText()
+
+            # Save per-file scene selection
+            if self.current_file and self.link_scene_combo.currentText():
+                per_file_scenes = link_state.get('per_file_scenes', {})
+                per_file_scenes[str(self.current_file)] = self.link_scene_combo.currentText()
+                link_state['per_file_scenes'] = per_file_scenes
+
+            # Save source file and collection
+            if self.link_source_input.text():
+                link_state['last_source_file'] = self.link_source_input.text()
+
+            if self.link_collection_input.text():
+                link_state['last_target_collection'] = self.link_collection_input.text()
+
+            config_data['link_operation'] = link_state
+
+            # Write back to file
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+
+        except Exception as e:
+            print(f"Warning: Could not save link operation state: {e}")
+
+    def _restore_link_state(self):
+        """Restore link operation state from config file."""
+        if not self.config_file or not self.config_file.exists():
+            return
+
+        try:
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            link_state = config_data.get('link_operation', {})
+
+            # Restore lock state
+            scene_lock_enabled = link_state.get('scene_lock_enabled', False)
+            self.link_scene_lock.setChecked(scene_lock_enabled)
+
+            # Restore last source file
+            last_source = link_state.get('last_source_file')
+            if last_source and Path(last_source).exists():
+                self.link_source_input.setText(last_source)
+
+            # Restore last target collection
+            last_collection = link_state.get('last_target_collection', '')
+            self.link_collection_input.setText(last_collection)
+
+        except Exception as e:
+            print(f"Warning: Could not restore link operation state: {e}")
+
+    def _restore_scene_selection(self):
+        """Restore scene selection based on lock state and per-file settings."""
+        if not self.config_file or not self.config_file.exists() or not self.current_file:
+            return
+
+        try:
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            link_state = config_data.get('link_operation', {})
+
+            # Check if lock is enabled
+            if link_state.get('scene_lock_enabled', False):
+                # Use locked scene
+                locked_scene = link_state.get('locked_scene')
+                if locked_scene:
+                    index = self.link_scene_combo.findText(locked_scene)
+                    if index >= 0:
+                        self.link_scene_combo.setCurrentIndex(index)
+                        return
+
+            # Otherwise, check for per-file scene
+            per_file_scenes = link_state.get('per_file_scenes', {})
+            file_scene = per_file_scenes.get(str(self.current_file))
+            if file_scene:
+                index = self.link_scene_combo.findText(file_scene)
+                if index >= 0:
+                    self.link_scene_combo.setCurrentIndex(index)
+
+        except Exception as e:
+            print(f"Warning: Could not restore scene selection: {e}")
