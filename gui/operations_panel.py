@@ -315,23 +315,16 @@ class OperationsPanelWidget(QWidget):
         source_section_label = QLabel("<b>Source (Link from):</b>")
         tab_layout.addWidget(source_section_label)
 
-        # Source file selection
+        # Source file display (selected from file browser)
         source_file_label = QLabel("From file:")
         tab_layout.addWidget(source_file_label)
 
-        source_file_layout = QHBoxLayout()
+        self.link_source_display = QLabel("<i>Select a .blend file in the file browser</i>")
+        self.link_source_display.setWordWrap(True)
+        self.link_source_display.setStyleSheet(Theme.get_file_display_style())
+        tab_layout.addWidget(self.link_source_display)
 
-        self.link_source_input = QLineEdit()
-        self.link_source_input.setPlaceholderText("Select source .blend file...")
-        self.link_source_input.setReadOnly(True)
-        source_file_layout.addWidget(self.link_source_input, stretch=1)
-
-        self.link_source_browse_btn = QPushButton("Browse...")
-        self.link_source_browse_btn.setEnabled(False)
-        self.link_source_browse_btn.clicked.connect(self._browse_source_file)
-        source_file_layout.addWidget(self.link_source_browse_btn)
-
-        tab_layout.addLayout(source_file_layout)
+        self.link_source_file: Path | None = None  # Track source file
 
         # Load items button
         self.link_load_btn = QPushButton("Load Objects/Collections")
@@ -451,25 +444,42 @@ class OperationsPanelWidget(QWidget):
             self.tex_execute_btn.setEnabled(False)
 
         # Update Link tab (only for .blend files)
-        # If lock is enabled, don't update the target
         if self.link_scene_lock.isChecked():
-            # Target is locked, don't update it
-            pass
+            # Target is locked - selected file becomes SOURCE
+            if is_blend:
+                self.link_source_file = file_path
+                self.link_source_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
+                self.link_load_btn.setEnabled(True)
+                # Clear previous items when source changes
+                self.link_items_list.clear()
+                self.link_source_data = {"objects": [], "collections": []}
+            else:
+                # Non-.blend file selected, clear source
+                self.link_source_file = None
+                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
+                self.link_load_btn.setEnabled(False)
+                self.link_items_list.clear()
+                self.link_source_data = {"objects": [], "collections": []}
         else:
-            # Target is not locked, update normally
+            # Target is not locked - selected file becomes TARGET
             if is_blend:
                 self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
-                self.link_source_browse_btn.setEnabled(True)
                 self._load_scenes_for_target()
+                # Clear source since target changed
+                self.link_source_file = None
+                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
+                self.link_load_btn.setEnabled(False)
+                self.link_items_list.clear()
+                self.link_source_data = {"objects": [], "collections": []}
             else:
                 self.link_target_display.setText("<i>No .blend file selected</i>")
                 self.link_scene_combo.clear()
                 self.link_scene_combo.setEnabled(False)
-                self.link_source_browse_btn.setEnabled(False)
+                self.link_source_file = None
+                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
                 self.link_load_btn.setEnabled(False)
                 self.link_preview_btn.setEnabled(False)
                 self.link_execute_btn.setEnabled(False)
-                self.link_source_input.clear()
                 self.link_items_list.clear()
                 self.link_source_data = {"objects": [], "collections": []}
 
@@ -1251,7 +1261,6 @@ class OperationsPanelWidget(QWidget):
             # Update target to current file
             if self.current_file and self.current_file.suffix == '.blend':
                 self.link_target_display.setText(f"<b>{self.current_file.name}</b><br><small>{str(self.current_file)}</small>")
-                self.link_source_browse_btn.setEnabled(True)
                 self._load_scenes_for_target()
 
         # Update scene combo state based on lock
@@ -1260,37 +1269,14 @@ class OperationsPanelWidget(QWidget):
         # Save lock state
         self._save_link_state()
 
-    def _browse_source_file(self):
-        """Browse for source .blend file."""
-        if not self.current_file:
-            return
-
-        # Start from project root
-        start_dir = str(self.controller.project.project_root)
-
-        source_file, _ = QFileDialog.getOpenFileName(
-            self,
-            "Select Source .blend File",
-            start_dir,
-            "Blender Files (*.blend)"
-        )
-
-        if source_file:
-            self.link_source_input.setText(source_file)
-            self.link_load_btn.setEnabled(True)
-            # Clear previous data
-            self.link_items_list.clear()
-            self.link_source_data = {"objects": [], "collections": []}
-
     def _load_link_source(self):
         """Load objects and collections from the source .blend file."""
-        source_file = self.link_source_input.text().strip()
-        if not source_file:
+        if not self.link_source_file:
+            QMessageBox.warning(self, "No Source File", "Please select a source .blend file in the file browser.")
             return
 
-        source_path = Path(source_file)
-        if not source_path.exists():
-            QMessageBox.warning(self, "File Not Found", f"Source file not found: {source_file}")
+        if not self.link_source_file.exists():
+            QMessageBox.warning(self, "File Not Found", f"Source file not found: {self.link_source_file}")
             return
 
         # Show loading state
@@ -1306,7 +1292,7 @@ class OperationsPanelWidget(QWidget):
 
             result = runner.run_script(
                 script_path,
-                {"blend-file": str(source_path)},
+                {"blend-file": str(self.link_source_file)},
                 timeout=60
             )
 
@@ -1394,9 +1380,8 @@ class OperationsPanelWidget(QWidget):
             return
 
         # Get source file
-        source_file = self.link_source_input.text().strip()
-        if not source_file or not Path(source_file).exists():
-            QMessageBox.warning(self, "No Source", "Please select a valid source .blend file.")
+        if not self.link_source_file or not self.link_source_file.exists():
+            QMessageBox.warning(self, "No Source", "Please select a valid source .blend file in the file browser.")
             return
 
         # Get selected items
@@ -1457,7 +1442,7 @@ class OperationsPanelWidget(QWidget):
             params = LinkOperationParams(
                 target_file=target_file,
                 target_scene=target_scene,
-                source_file=Path(source_file),
+                source_file=self.link_source_file,
                 item_names=item_names,
                 item_types=item_types,
                 target_collection=target_collection if target_collection else "",
@@ -1558,10 +1543,7 @@ class OperationsPanelWidget(QWidget):
                 per_file_scenes[str(target_file)] = self.link_scene_combo.currentText()
                 link_state['per_file_scenes'] = per_file_scenes
 
-            # Save source file and collection
-            if self.link_source_input.text():
-                link_state['last_source_file'] = self.link_source_input.text()
-
+            # Save target collection
             if self.link_collection_input.text():
                 link_state['last_target_collection'] = self.link_collection_input.text()
 
@@ -1620,11 +1602,6 @@ class OperationsPanelWidget(QWidget):
                 self.link_scene_lock.setChecked(False)
                 self.link_scene_lock.blockSignals(False)
 
-            # Restore last source file
-            last_source = link_state.get('last_source_file')
-            if last_source and Path(last_source).exists():
-                self.link_source_input.setText(last_source)
-
             # Restore last target collection
             last_collection = link_state.get('last_target_collection', '')
             self.link_collection_input.setText(last_collection)
@@ -1678,7 +1655,6 @@ class OperationsPanelWidget(QWidget):
             self.link_locked_file = locked_file
             # Update the display to show the locked file
             self.link_target_display.setText(f"<b>{locked_file.name}</b><br><small>{str(locked_file)}</small>")
-            self.link_source_browse_btn.setEnabled(True)
 
             # Load scenes for the locked file
             blender_service = self.controller.project.blender_service
