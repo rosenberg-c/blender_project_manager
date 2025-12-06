@@ -5,22 +5,12 @@ import json
 import sys
 import argparse
 import os
+from pathlib import Path
 
+# Add parent directory to path so we can import core module
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-def find_blend_files(root_path):
-    """Find all .blend files under root path, excluding ignored directories."""
-    ignore_dirs = {".git", ".svn", ".hg", "__pycache__", ".idea", ".vscode"}
-    blend_files = []
-
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        # Remove ignored directories in-place
-        dirnames[:] = [d for d in dirnames if d not in ignore_dirs and not d.startswith(".")]
-
-        for fname in filenames:
-            if fname.lower().endswith(".blend") and not fname.startswith("."):
-                blend_files.append(os.path.join(dirpath, fname))
-
-    return blend_files
+from core.file_scanner import find_blend_files
 
 
 def rename_local_items(item_names, find_text, replace_text, dry_run=True):
@@ -134,7 +124,7 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
     lib_abs = os.path.abspath(lib_path)
 
     # Find all .blend files in project
-    all_blend_files = find_blend_files(root_dir)
+    all_blend_files = [str(f) for f in find_blend_files(Path(root_dir))]
 
     for blend_file in all_blend_files:
         # Skip the library file itself

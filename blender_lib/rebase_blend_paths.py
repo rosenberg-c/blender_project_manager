@@ -7,39 +7,10 @@ import argparse
 import os
 from pathlib import Path
 
+# Add parent directory to path so we can import core module
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-def rebase_relative_path(original_path, old_blend_dir, new_blend_dir):
-    """Given a Blender-style relative path starting with '//',
-    compute a new relative path from new_blend_dir that still points
-    to the same absolute file.
-
-    Args:
-        original_path: Path like '//../../textures/wood.jpg'
-        old_blend_dir: Directory where blend file WAS located
-        new_blend_dir: Directory where blend file IS NOW located
-
-    Returns:
-        New relative path from new_blend_dir
-    """
-    if not original_path.startswith("//"):
-        return original_path
-
-    # Remove '//' prefix
-    rel_part = original_path[2:]
-
-    # Resolve to absolute path from old location
-    old_abs = os.path.normpath(os.path.join(old_blend_dir, rel_part))
-
-    # Create new relative path from new location
-    try:
-        new_rel = os.path.relpath(old_abs, new_blend_dir)
-        # Convert back slashes to forward slashes for Blender
-        new_rel = new_rel.replace("\\", "/")
-    except ValueError:
-        # Can't make relative path (different drives on Windows)
-        return original_path
-
-    return "//" + new_rel
+from core.path_utils import rebase_relative_path
 
 
 def rebase_blend_file(blend_path, old_dir, new_dir, moved_files_old_paths=None, dry_run=True):
@@ -109,7 +80,7 @@ def rebase_blend_file(blend_path, old_dir, new_dir, moved_files_old_paths=None, 
                 continue
 
             # File was NOT moved - rebase the path
-            new_path = rebase_relative_path(original_path, str(old_dir_path), str(new_dir_path))
+            new_path = rebase_relative_path(original_path, old_dir_path, new_dir_path)
 
             if new_path != original_path:
                 result["rebased_images"].append({
@@ -147,7 +118,7 @@ def rebase_blend_file(blend_path, old_dir, new_dir, moved_files_old_paths=None, 
                 continue
 
             # File was NOT moved - rebase the path
-            new_path = rebase_relative_path(original_path, str(old_dir_path), str(new_dir_path))
+            new_path = rebase_relative_path(original_path, old_dir_path, new_dir_path)
 
             if new_path != original_path:
                 result["rebased_libraries"].append({
