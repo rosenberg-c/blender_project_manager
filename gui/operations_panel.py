@@ -66,22 +66,11 @@ class OperationsPanelWidget(QWidget):
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
 
-        # Separator
-        layout.addSpacing(10)
-
-        # Utilities section
-        utilities_label = QLabel("<b>Utilities:</b>")
-        layout.addWidget(utilities_label)
-
-        self.clean_blend1_btn = QPushButton("Clean Backup Files")
-        self.clean_blend1_btn.clicked.connect(self._clean_blend1_files)
-        self.clean_blend1_btn.setToolTip("Remove all .blend1 and .blend2 backup files from the project")
-        layout.addWidget(self.clean_blend1_btn)
-
         # Create tabs
         self.create_move_tab()
         self.create_rename_objects_tab()
         self.create_link_tab()
+        self.create_utilities_tab()
 
     def create_move_tab(self):
         """Create the Move/Rename file or directory tab."""
@@ -376,6 +365,48 @@ class OperationsPanelWidget(QWidget):
 
         # Add tab to tabs widget
         self.tabs.addTab(scroll, "Link Objects")
+
+    def create_utilities_tab(self):
+        """Create the Utilities tab."""
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        # Create content widget
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
+
+        info_label = QLabel("<b>Project Utilities:</b>")
+        tab_layout.addWidget(info_label)
+
+        desc_label = QLabel("Tools for managing and cleaning up your project.")
+        desc_label.setWordWrap(True)
+        tab_layout.addWidget(desc_label)
+
+        tab_layout.addSpacing(10)
+
+        # Clean backup files section
+        backup_label = QLabel("<b>Backup Files:</b>")
+        tab_layout.addWidget(backup_label)
+
+        backup_desc = QLabel("Remove Blender's automatic backup files (.blend1, .blend2) to free up disk space.")
+        backup_desc.setWordWrap(True)
+        tab_layout.addWidget(backup_desc)
+
+        self.clean_blend1_btn = QPushButton("Clean Backup Files")
+        self.clean_blend1_btn.clicked.connect(self._clean_blend1_files)
+        self.clean_blend1_btn.setToolTip("Remove all .blend1 and .blend2 backup files from the project")
+        tab_layout.addWidget(self.clean_blend1_btn)
+
+        # Add stretch to push everything to top
+        tab_layout.addStretch()
+
+        # Set content widget in scroll area
+        scroll.setWidget(content)
+
+        # Add tab to tabs widget
+        self.tabs.addTab(scroll, "Utilities")
 
     def set_file(self, file_path: Path):
         """Set the currently selected file or directory.
