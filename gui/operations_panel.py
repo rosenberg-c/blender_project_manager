@@ -66,6 +66,18 @@ class OperationsPanelWidget(QWidget):
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
 
+        # Separator
+        layout.addSpacing(10)
+
+        # Utilities section
+        utilities_label = QLabel("<b>Utilities:</b>")
+        layout.addWidget(utilities_label)
+
+        self.clean_blend1_btn = QPushButton("Clean Backup Files")
+        self.clean_blend1_btn.clicked.connect(self._clean_blend1_files)
+        self.clean_blend1_btn.setToolTip("Remove all .blend1 and .blend2 backup files from the project")
+        layout.addWidget(self.clean_blend1_btn)
+
         # Create tabs
         self.create_move_tab()
         self.create_rename_objects_tab()
@@ -1716,3 +1728,93 @@ class OperationsPanelWidget(QWidget):
             locked_file = self.pending_locked_file_restore['locked_file']
             locked_scene = self.pending_locked_file_restore['locked_scene']
             self._apply_locked_file_restoration(locked_file, locked_scene)
+
+    def _clean_blend1_files(self):
+        """Remove all .blend1 and .blend2 backup files from the project."""
+        if not self.controller.project.is_open:
+            QMessageBox.warning(
+                self,
+                "No Project",
+                "Please open a project first."
+            )
+            return
+
+        try:
+            # Find all .blend1 and .blend2 files
+            project_root = self.controller.project.project_root
+            blend1_files = list(project_root.rglob('*.blend1'))
+            blend2_files = list(project_root.rglob('*.blend2'))
+            backup_files = blend1_files + blend2_files
+
+            if not backup_files:
+                QMessageBox.information(
+                    self,
+                    "No Backup Files",
+                    "No .blend1 or .blend2 backup files found in the project."
+                )
+                return
+
+            # Calculate total size
+            total_size = sum(f.stat().st_size for f in backup_files)
+            size_mb = total_size / (1024 * 1024)
+
+            # Confirm with user
+            reply = QMessageBox.question(
+                self,
+                "Confirm Deletion",
+                f"Found {len(backup_files)} backup file(s):\n"
+                f"  • {len(blend1_files)} .blend1 file(s)\n"
+                f"  • {len(blend2_files)} .blend2 file(s)\n\n"
+                f"Total size: {size_mb:.2f} MB\n\n"
+                f"Are you sure you want to delete these files?\n\n"
+                f"This action cannot be undone.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+            # Delete files
+            deleted_count = 0
+            failed = []
+
+            QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
+            QApplication.processEvents()
+
+            try:
+                for backup_file in backup_files:
+                    try:
+                        backup_file.unlink()
+                        deleted_count += 1
+                    except Exception as e:
+                        failed.append(f"{backup_file.name}: {str(e)}")
+            finally:
+                QApplication.restoreOverrideCursor()
+
+            # Show results
+            message_parts = []
+            if deleted_count > 0:
+                message_parts.append(f"<b>Successfully deleted {deleted_count} file(s)</b><br>")
+                message_parts.append(f"Freed {size_mb:.2f} MB of disk space<br>")
+
+            if failed:
+                message_parts.append(f"<br><b>Failed to delete {len(failed)} file(s):</b><br>")
+                for error in failed[:5]:
+                    message_parts.append(f"  • {error}<br>")
+                if len(failed) > 5:
+                    message_parts.append(f"  ... and {len(failed) - 5} more<br>")
+
+            QMessageBox.information(
+                self,
+                "Cleanup Complete",
+                "".join(message_parts)
+            )
+
+        except Exception as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Failed to clean backup files:\n\n{str(e)}"
+            )
