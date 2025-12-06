@@ -1,12 +1,14 @@
 """File browser widget with tree view."""
 
 import json
+import subprocess
+import platform
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QModelIndex
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit,
-    QTreeView, QFileSystemModel
+    QTreeView, QFileSystemModel, QMessageBox
 )
 
 from controllers.project_controller import ProjectController
@@ -67,6 +69,9 @@ class FileBrowserWidget(QWidget):
         # Connect selection signal
         self.tree.clicked.connect(self._on_item_clicked)
 
+        # Connect double-click signal to open in Blender
+        self.tree.doubleClicked.connect(self._on_item_double_clicked)
+
         layout.addWidget(self.tree)
 
         # State restoration data
@@ -93,6 +98,54 @@ class FileBrowserWidget(QWidget):
         # Emit signal for both files and directories
         if file_path.is_file() or file_path.is_dir():
             self.file_selected.emit(file_path)
+
+    def _on_item_double_clicked(self, index):
+        """Handle double-click to open .blend file in Blender.
+
+        Args:
+            index: QModelIndex of double-clicked item
+        """
+        file_path = Path(self.model.filePath(index))
+
+        # Only open .blend files
+        if not file_path.is_file() or file_path.suffix != '.blend':
+            return
+
+        try:
+            system = platform.system()
+
+            if system == 'Darwin':  # macOS
+                # Use 'open -a Blender -n' to open in new instance
+                subprocess.Popen(['open', '-a', 'Blender', '-n', str(file_path)])
+            elif system == 'Windows':
+                # Use blender executable from project controller
+                if self.project.is_open and self.project.blender_path:
+                    subprocess.Popen([str(self.project.blender_path), str(file_path)])
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Blender Not Found",
+                        "Cannot open file: Blender path not configured.\n\n"
+                        "Please ensure a project is open with a valid Blender installation."
+                    )
+            else:  # Linux and others
+                # Use blender executable from project controller
+                if self.project.is_open and self.project.blender_path:
+                    subprocess.Popen([str(self.project.blender_path), str(file_path)])
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Blender Not Found",
+                        "Cannot open file: Blender path not configured.\n\n"
+                        "Please ensure a project is open with a valid Blender installation."
+                    )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error Opening File",
+                f"Failed to open {file_path.name} in Blender:\n\n{str(e)}"
+            )
 
     def get_selected_path(self) -> Path | None:
         """Get the currently selected file or directory path.
