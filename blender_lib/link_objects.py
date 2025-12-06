@@ -70,7 +70,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     return result
 
                 col_name = collections_to_link[0]
-                instance_name = f"{col_name}_instance"
+                instance_name = f"{col_name}"
 
                 # Load source file to check collection
                 with bpy.data.libraries.load(source_file, link=False) as (data_from, data_to):
@@ -155,7 +155,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     return result
 
                 col_name = collections_to_link[0]
-                instance_name = f"{col_name}_instance"
+                instance_name = f"{col_name}"
 
                 # Check for duplicates before linking
                 if col_name in bpy.data.collections:
@@ -191,7 +191,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                 # Create a collection instance (Empty object that instances the collection)
                 # This creates the orange "instance" behavior in Blender
-                instance_name = f"{col_name}_instance"
+                instance_name = f"{col_name}"
 
                 # Create an empty object
                 empty = bpy.data.objects.new(instance_name, None)
