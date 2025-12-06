@@ -68,7 +68,6 @@ class OperationsPanelWidget(QWidget):
         # Create tabs
         self.create_move_tab()
         self.create_rename_objects_tab()
-        self.create_rename_texture_tab()
         self.create_link_tab()
 
     def create_move_tab(self):
@@ -205,65 +204,6 @@ class OperationsPanelWidget(QWidget):
 
         # Add tab to tabs widget
         self.tabs.addTab(tab, "Rename Objects")
-
-    def create_rename_texture_tab(self):
-        """Create the Rename Texture tab."""
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
-
-        info_label = QLabel("<b>Rename Texture:</b>")
-        tab_layout.addWidget(info_label)
-
-        desc_label = QLabel("Rename a texture file and update all references in .blend files.")
-        desc_label.setWordWrap(True)
-        tab_layout.addWidget(desc_label)
-
-        tab_layout.addSpacing(10)
-
-        # Current texture path
-        current_label = QLabel("Current texture path:")
-        tab_layout.addWidget(current_label)
-
-        self.tex_current_input = QLineEdit()
-        self.tex_current_input.setPlaceholderText("Path to texture file...")
-        self.tex_current_input.setReadOnly(True)
-        tab_layout.addWidget(self.tex_current_input)
-
-        # New texture path
-        new_label = QLabel("New texture path:")
-        tab_layout.addWidget(new_label)
-
-        self.tex_new_input = QLineEdit()
-        self.tex_new_input.setPlaceholderText("New path for texture...")
-        tab_layout.addWidget(self.tex_new_input)
-
-        # Buttons
-        btn_row = QHBoxLayout()
-
-        self.tex_browse_btn = QPushButton("Browse...")
-        self.tex_browse_btn.setEnabled(False)
-        self.tex_browse_btn.clicked.connect(self._browse_new_texture_path)
-        btn_row.addWidget(self.tex_browse_btn)
-
-        self.tex_preview_btn = QPushButton("Preview Changes")
-        self.tex_preview_btn.setEnabled(False)
-        self.tex_preview_btn.setProperty("class", "info")
-        self.tex_preview_btn.clicked.connect(self._preview_rename_texture)
-        btn_row.addWidget(self.tex_preview_btn)
-
-        tab_layout.addLayout(btn_row)
-
-        self.tex_execute_btn = QPushButton("Execute Rename")
-        self.tex_execute_btn.setEnabled(False)
-        self.tex_execute_btn.setProperty("class", "primary")
-        self.tex_execute_btn.clicked.connect(self._execute_rename_texture)
-        tab_layout.addWidget(self.tex_execute_btn)
-
-        # Add stretch
-        tab_layout.addStretch()
-
-        # Add tab to tabs widget
-        self.tabs.addTab(tab, "Rename Texture")
 
     def create_link_tab(self):
         """Create the Link Objects/Collections tab."""
@@ -410,7 +350,7 @@ class OperationsPanelWidget(QWidget):
         is_blend = file_path.suffix == '.blend'
         is_texture = file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
 
-        # Update Move/Rename tab
+        # Update Move/Rename tab (handles both .blend and texture files)
         self.new_path_input.setText(str(file_path))
         self.browse_btn.setEnabled(True)
         self.preview_btn.setEnabled(True)
@@ -428,20 +368,6 @@ class OperationsPanelWidget(QWidget):
             self.obj_execute_btn.setEnabled(False)
             self.obj_list.clear()
             self.obj_list_data = {"objects": [], "collections": []}
-
-        # Update Rename Texture tab (for texture files)
-        if is_texture:
-            self.tex_current_input.setText(str(file_path))
-            self.tex_new_input.setText(str(file_path))
-            self.tex_browse_btn.setEnabled(True)
-            self.tex_preview_btn.setEnabled(True)
-            self.tex_execute_btn.setEnabled(True)
-        else:
-            self.tex_current_input.clear()
-            self.tex_new_input.clear()
-            self.tex_browse_btn.setEnabled(False)
-            self.tex_preview_btn.setEnabled(False)
-            self.tex_execute_btn.setEnabled(False)
 
         # Update Link tab (only for .blend files)
         if self.link_scene_lock.isChecked():
@@ -810,195 +736,6 @@ class OperationsPanelWidget(QWidget):
             btn.setText(original_text)
             btn.setEnabled(True)
 
-    def _browse_new_texture_path(self):
-        """Open file dialog to select new texture path."""
-        if not self.current_file:
-            return
-
-        # Show loading state
-        self.tex_browse_btn.setText("Browsing...")
-        self.tex_browse_btn.setEnabled(False)
-        QApplication.processEvents()
-
-        try:
-            new_path, _ = QFileDialog.getSaveFileName(
-                self,
-                "Select New Location for Texture",
-                str(self.current_file),
-                f"*{self.current_file.suffix}"
-            )
-
-            if new_path:
-                self.tex_new_input.setText(new_path)
-
-        finally:
-            # Restore button state
-            self.tex_browse_btn.setText("Browse...")
-            self.tex_browse_btn.setEnabled(True)
-
-    def _preview_rename_texture(self):
-        """Preview the rename operation for texture file."""
-        self._rename_texture_internal(dry_run=True)
-
-    def _execute_rename_texture(self):
-        """Execute the rename operation for texture file."""
-        # Confirm with user
-        reply = QMessageBox.question(
-            self,
-            "Confirm Rename",
-            "This will rename/move the texture file and update all .blend file references.\n\n"
-            "Are you sure you want to continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply != QMessageBox.Yes:
-            return
-
-        self._rename_texture_internal(dry_run=False)
-
-    def _rename_texture_internal(self, dry_run=True):
-        """Internal method to handle texture rename preview/execute.
-
-        Args:
-            dry_run: If True, only preview changes
-        """
-        if not self.current_file:
-            QMessageBox.warning(self, "No File", "Please select a texture file first.")
-            return
-
-        # Get old and new paths
-        old_path = Path(self.tex_current_input.text().strip())
-        new_path = Path(self.tex_new_input.text().strip())
-
-        if not old_path or not new_path:
-            QMessageBox.warning(self, "Missing Input", "Please specify both old and new paths.")
-            return
-
-        if old_path == new_path:
-            QMessageBox.information(self, "No Change", "Old and new paths are the same.")
-            return
-
-        # Show loading state
-        btn = self.tex_preview_btn if dry_run else self.tex_execute_btn
-        original_text = btn.text()
-        btn.setText("Processing..." if dry_run else "Executing...")
-        btn.setEnabled(False)
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-        QApplication.processEvents()
-
-        try:
-            from pathlib import Path as LibPath
-
-            runner = self.controller.project.blender_service.runner
-            script_path = LibPath(__file__).parent.parent / "blender_lib" / "rename_texture.py"
-
-            # Get project root
-            project_root = self.controller.project.project_root
-
-            # Run the script
-            result = runner.run_script(
-                script_path,
-                {
-                    "old-path": str(old_path),
-                    "new-path": str(new_path),
-                    "project-root": str(project_root),
-                    "dry-run": "true" if dry_run else "false"
-                },
-                timeout=120
-            )
-
-            # Parse JSON output
-            from services.blender_service import extract_json_from_output
-            data = extract_json_from_output(result.stdout)
-
-            if not data.get("success", False):
-                errors = data.get("errors", [])
-                raise Exception(errors[0] if errors else "Unknown error")
-
-            # Show results
-            updated_files = data.get("updated_files", [])
-            updated_files_count = data.get("updated_files_count", 0)
-            file_moved = data.get("file_moved", False)
-            warnings = data.get("warnings", [])
-            errors = data.get("errors", [])
-
-            message_parts = []
-
-            if dry_run:
-                # Preview mode
-                message_parts.append(f"<b>Will rename texture file:</b><br>")
-                message_parts.append(f"  {old_path.name} → {new_path.name}<br>")
-
-                if updated_files_count > 0:
-                    message_parts.append(f"<br><b>Will update {updated_files_count} .blend file(s):</b><br>")
-                    for file_info in updated_files[:5]:
-                        file_name = Path(file_info["file"]).name
-                        image_count = len(file_info["updated_images"])
-                        message_parts.append(f"  • {file_name} ({image_count} image(s))<br>")
-                    if len(updated_files) > 5:
-                        message_parts.append(f"  ... and {len(updated_files) - 5} more<br>")
-                else:
-                    message_parts.append("<br><i>No .blend files reference this texture.</i><br>")
-            else:
-                # Execute mode
-                if file_moved:
-                    message_parts.append(f"<b>Successfully renamed texture file!</b><br>")
-                else:
-                    message_parts.append(f"<b>Texture file prepared for rename.</b><br>")
-
-                if updated_files_count > 0:
-                    message_parts.append(f"<br><b>Updated {updated_files_count} .blend file(s):</b><br>")
-                    for file_info in updated_files[:5]:
-                        file_name = Path(file_info["file"]).name
-                        image_count = len(file_info["updated_images"])
-                        message_parts.append(f"  • {file_name} ({image_count} image(s))<br>")
-                    if len(updated_files) > 5:
-                        message_parts.append(f"  ... and {len(updated_files) - 5} more<br>")
-
-            if warnings:
-                message_parts.append(f"<br><b>Warnings:</b><br>")
-                for warning in warnings[:5]:
-                    message_parts.append(f"  • {warning}<br>")
-                if len(warnings) > 5:
-                    message_parts.append(f"  ... and {len(warnings) - 5} more<br>")
-
-            if errors:
-                message_parts.append(f"<br><b>Errors:</b><br>")
-                for error in errors:
-                    message_parts.append(f"  • {error}<br>")
-
-            QMessageBox.information(
-                self,
-                "Preview Results" if dry_run else "Rename Complete",
-                "".join(message_parts)
-            )
-
-            # Clear inputs after successful execution
-            if not dry_run and file_moved:
-                self.tex_current_input.clear()
-                self.tex_new_input.clear()
-                self.tex_browse_btn.setEnabled(False)
-                self.tex_preview_btn.setEnabled(False)
-                self.tex_execute_btn.setEnabled(False)
-
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print("=== Texture Rename Error ===")
-            print(error_details)
-
-            QMessageBox.critical(
-                self,
-                "Rename Error",
-                f"Failed to rename texture:\n\n{str(e)}"
-            )
-        finally:
-            # Restore state
-            QApplication.restoreOverrideCursor()
-            btn.setText(original_text)
-            btn.setEnabled(True)
-
     def _browse_new_path(self):
         """Open file dialog to select new path."""
         if not self.current_file:
@@ -1037,6 +774,10 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.information(self, "No Change", "Source and target are the same.")
             return
 
+        # Check file type
+        is_blend = self.current_file.suffix == '.blend'
+        is_texture = self.current_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+
         # Show loading state
         self.preview_btn.setText("Loading Preview...")
         self.preview_btn.setEnabled(False)
@@ -1044,17 +785,95 @@ class OperationsPanelWidget(QWidget):
         QApplication.processEvents()  # Force UI update
 
         try:
-            # Get preview from controller
-            preview = self.controller.preview_move_file(self.current_file, new_path)
+            if is_blend:
+                # Get preview from controller for .blend files
+                preview = self.controller.preview_move_file(self.current_file, new_path)
 
-            # Restore normal state
-            QApplication.restoreOverrideCursor()
-            self.preview_btn.setText("Preview Changes")
-            self.preview_btn.setEnabled(True)
+                # Restore normal state
+                QApplication.restoreOverrideCursor()
+                self.preview_btn.setText("Preview Changes")
+                self.preview_btn.setEnabled(True)
 
-            # Show preview dialog
-            dialog = OperationPreviewDialog(preview, self)
-            dialog.exec()
+                # Show preview dialog
+                dialog = OperationPreviewDialog(preview, self)
+                dialog.exec()
+
+            elif is_texture:
+                # Handle texture files using Blender script
+                runner = self.controller.project.blender_service.runner
+                script_path = Path(__file__).parent.parent / "blender_lib" / "rename_texture.py"
+                project_root = self.controller.project.project_root
+
+                # Run preview
+                result = runner.run_script(
+                    script_path,
+                    {
+                        "old-path": str(self.current_file),
+                        "new-path": str(new_path),
+                        "project-root": str(project_root),
+                        "dry-run": "true"
+                    },
+                    timeout=120
+                )
+
+                # Parse JSON output
+                from services.blender_service import extract_json_from_output
+                data = extract_json_from_output(result.stdout)
+
+                # Restore normal state
+                QApplication.restoreOverrideCursor()
+                self.preview_btn.setText("Preview Changes")
+                self.preview_btn.setEnabled(True)
+
+                if not data.get("success", False):
+                    errors = data.get("errors", [])
+                    raise Exception(errors[0] if errors else "Unknown error")
+
+                # Show results
+                updated_files = data.get("updated_files", [])
+                updated_files_count = data.get("updated_files_count", 0)
+                warnings = data.get("warnings", [])
+
+                message_parts = []
+                message_parts.append(f"<b>Will rename texture file:</b><br>")
+                message_parts.append(f"  {self.current_file.name} → {new_path.name}<br>")
+
+                if updated_files_count > 0:
+                    message_parts.append(f"<br><b>Will update {updated_files_count} .blend file(s):</b><br>")
+                    for file_info in updated_files[:5]:
+                        file_name = Path(file_info["file"]).name
+                        image_count = len(file_info["updated_images"])
+                        message_parts.append(f"  • {file_name} ({image_count} image(s))<br>")
+                    if len(updated_files) > 5:
+                        message_parts.append(f"  ... and {len(updated_files) - 5} more<br>")
+                else:
+                    message_parts.append("<br><i>No .blend files reference this texture.</i><br>")
+
+                if warnings:
+                    message_parts.append(f"<br><b>Warnings:</b><br>")
+                    for warning in warnings[:5]:
+                        message_parts.append(f"  • {warning}<br>")
+                    if len(warnings) > 5:
+                        message_parts.append(f"  ... and {len(warnings) - 5} more<br>")
+
+                QMessageBox.information(
+                    self,
+                    "Preview Results",
+                    "".join(message_parts)
+                )
+
+            else:
+                # Unsupported file type
+                QApplication.restoreOverrideCursor()
+                self.preview_btn.setText("Preview Changes")
+                self.preview_btn.setEnabled(True)
+
+                QMessageBox.warning(
+                    self,
+                    "Unsupported File Type",
+                    f"Cannot preview move operation for {self.current_file.suffix} files.\n\n"
+                    "Supported: .blend files and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
+                )
 
         except Exception as e:
             # Restore normal state on error
@@ -1080,6 +899,10 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.information(self, "No Change", "Source and target are the same.")
             return
 
+        # Check file type
+        is_blend = self.current_file.suffix == '.blend'
+        is_texture = self.current_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+
         # Confirm with user
         reply = QMessageBox.question(
             self,
@@ -1102,58 +925,160 @@ class OperationsPanelWidget(QWidget):
         QApplication.processEvents()  # Force UI update
 
         try:
-            # Create and show progress dialog immediately
-            progress_dialog = OperationProgressDialog(
-                f"Moving {self.current_file.name}",
-                self
-            )
-            progress_dialog.show()  # Show immediately, don't wait for exec()
-            QApplication.processEvents()  # Force dialog to appear
+            if is_blend:
+                # Create and show progress dialog immediately
+                progress_dialog = OperationProgressDialog(
+                    f"Moving {self.current_file.name}",
+                    self
+                )
+                progress_dialog.show()  # Show immediately, don't wait for exec()
+                QApplication.processEvents()  # Force dialog to appear
 
-            # Execute operation
-            result = self.controller.execute_move_file(
-                self.current_file,
-                new_path,
-                progress_dialog.update_progress
-            )
+                # Execute operation
+                result = self.controller.execute_move_file(
+                    self.current_file,
+                    new_path,
+                    progress_dialog.update_progress
+                )
 
-            # Restore normal cursor
-            QApplication.restoreOverrideCursor()
+                # Restore normal cursor
+                QApplication.restoreOverrideCursor()
 
-            # Show result
-            if result.success:
-                progress_dialog.update_progress(100, result.message)
-                progress_dialog.exec()
+                # Show result
+                if result.success:
+                    progress_dialog.update_progress(100, result.message)
+                    progress_dialog.exec()
+
+                    QMessageBox.information(
+                        self,
+                        "Success",
+                        f"{result.message}\n\n{result.changes_made} changes made."
+                    )
+
+                    # Clear selection
+                    self.current_file = None
+                    self.file_display.setText("<i>No file selected</i>")
+                    self.new_path_input.clear()
+                    self.browse_btn.setEnabled(False)
+                    self.preview_btn.setEnabled(False)
+                    self.execute_btn.setText("Execute Move")  # Restore text
+                    self.execute_btn.setEnabled(False)
+                else:
+                    progress_dialog.mark_error(result.message)
+                    progress_dialog.exec()
+
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        f"Operation failed:\n\n{result.message}"
+                    )
+
+                    # Restore button state on error
+                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setEnabled(True)
+                    self.preview_btn.setEnabled(True)
+                    self.browse_btn.setEnabled(True)
+
+            elif is_texture:
+                # Handle texture files using Blender script
+                runner = self.controller.project.blender_service.runner
+                script_path = Path(__file__).parent.parent / "blender_lib" / "rename_texture.py"
+                project_root = self.controller.project.project_root
+
+                # Run execute
+                result = runner.run_script(
+                    script_path,
+                    {
+                        "old-path": str(self.current_file),
+                        "new-path": str(new_path),
+                        "project-root": str(project_root),
+                        "dry-run": "false"
+                    },
+                    timeout=120
+                )
+
+                # Parse JSON output
+                from services.blender_service import extract_json_from_output
+                data = extract_json_from_output(result.stdout)
+
+                # Restore normal cursor
+                QApplication.restoreOverrideCursor()
+
+                if not data.get("success", False):
+                    errors = data.get("errors", [])
+                    raise Exception(errors[0] if errors else "Unknown error")
+
+                # Show results
+                updated_files = data.get("updated_files", [])
+                updated_files_count = data.get("updated_files_count", 0)
+                file_moved = data.get("file_moved", False)
+                warnings = data.get("warnings", [])
+                errors = data.get("errors", [])
+
+                message_parts = []
+
+                if file_moved:
+                    message_parts.append(f"<b>Successfully renamed texture file!</b><br>")
+                else:
+                    message_parts.append(f"<b>Texture file prepared for rename.</b><br>")
+
+                if updated_files_count > 0:
+                    message_parts.append(f"<br><b>Updated {updated_files_count} .blend file(s):</b><br>")
+                    for file_info in updated_files[:5]:
+                        file_name = Path(file_info["file"]).name
+                        image_count = len(file_info["updated_images"])
+                        message_parts.append(f"  • {file_name} ({image_count} image(s))<br>")
+                    if len(updated_files) > 5:
+                        message_parts.append(f"  ... and {len(updated_files) - 5} more<br>")
+
+                if warnings:
+                    message_parts.append(f"<br><b>Warnings:</b><br>")
+                    for warning in warnings[:5]:
+                        message_parts.append(f"  • {warning}<br>")
+                    if len(warnings) > 5:
+                        message_parts.append(f"  ... and {len(warnings) - 5} more<br>")
+
+                if errors:
+                    message_parts.append(f"<br><b>Errors:</b><br>")
+                    for error in errors:
+                        message_parts.append(f"  • {error}<br>")
 
                 QMessageBox.information(
                     self,
-                    "Success",
-                    f"{result.message}\n\n{result.changes_made} changes made."
+                    "Rename Complete",
+                    "".join(message_parts)
                 )
 
-                # Clear selection
-                self.current_file = None
-                self.file_display.setText("<i>No file selected</i>")
-                self.new_path_input.clear()
-                self.browse_btn.setEnabled(False)
-                self.preview_btn.setEnabled(False)
-                self.execute_btn.setText("Execute Move")  # Restore text
-                self.execute_btn.setEnabled(False)
+                # Clear inputs after successful execution
+                if file_moved:
+                    self.current_file = None
+                    self.file_display.setText("<i>No file selected</i>")
+                    self.new_path_input.clear()
+                    self.browse_btn.setEnabled(False)
+                    self.preview_btn.setEnabled(False)
+                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setEnabled(False)
+                else:
+                    # Restore button state
+                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setEnabled(True)
+                    self.preview_btn.setEnabled(True)
+                    self.browse_btn.setEnabled(True)
+
             else:
-                progress_dialog.mark_error(result.message)
-                progress_dialog.exec()
-
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"Operation failed:\n\n{result.message}"
-                )
-
-                # Restore button state on error
+                # Unsupported file type
+                QApplication.restoreOverrideCursor()
                 self.execute_btn.setText("Execute Move")
                 self.execute_btn.setEnabled(True)
                 self.preview_btn.setEnabled(True)
                 self.browse_btn.setEnabled(True)
+
+                QMessageBox.warning(
+                    self,
+                    "Unsupported File Type",
+                    f"Cannot execute move operation for {self.current_file.suffix} files.\n\n"
+                    "Supported: .blend files and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
+                )
 
         except Exception as e:
             # Restore state on exception
