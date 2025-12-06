@@ -301,6 +301,286 @@ class BlenderService:
                 errors=[str(e)]
             )
 
+    def preview_move_directory(self,
+                              old_path: Path,
+                              new_path: Path) -> OperationPreview:
+        """Preview what will change when moving a directory.
+
+        Args:
+            old_path: Current path of the directory
+            new_path: New path for the directory
+
+        Returns:
+            OperationPreview with list of changes for all files in directory
+        """
+        changes = []
+        warnings = []
+        errors = []
+
+        # Validation
+        if not old_path.exists():
+            errors.append(f"Source directory does not exist: {old_path}")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name}/",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        if not old_path.is_dir():
+            errors.append(f"Source is not a directory: {old_path}")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name}",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        if new_path.exists():
+            errors.append(f"Target directory already exists: {new_path}")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name}/",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        # Find all .blend and texture files in the directory recursively
+        blend_extensions = ['.blend']
+        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+        all_extensions = blend_extensions + texture_extensions
+
+        files_to_move = []
+        for ext in all_extensions:
+            files_to_move.extend(old_path.rglob(f'*{ext}'))
+
+        if not files_to_move:
+            warnings.append("No .blend or texture files found in directory")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name}/",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        # For each file, calculate its new path and check for references
+        from blender_lib.models import PathChange
+
+        for file in files_to_move:
+            # Calculate new path for this file (maintaining directory structure)
+            rel_path = file.relative_to(old_path)
+            file_new_path = new_path / rel_path
+
+            # Add a change for the file move itself
+            item_type = 'directory_move'
+            if file.suffix == '.blend':
+                item_type = 'directory_move_blend'  # Will also rebase internal paths
+
+            changes.append(PathChange(
+                file_path=file,
+                item_type=item_type,
+                item_name=str(rel_path),
+                old_path=str(file),
+                new_path=str(file_new_path),
+                status='ok'
+            ))
+
+        # Now scan all .blend files in the project for references to files being moved
+        all_blend_files = self.filesystem.find_blend_files()
+
+        for blend_file in all_blend_files:
+            # Skip blend files that are inside the directory being moved
+            try:
+                blend_file.relative_to(old_path)
+                continue  # This file is being moved, skip it
+            except ValueError:
+                pass  # Not inside old_path, check for references
+
+            # Check if this blend file references any of the files being moved
+            for file in files_to_move:
+                rel_path = file.relative_to(old_path)
+                file_new_path = new_path / rel_path
+
+                blend_changes = self._scan_blend_for_references(
+                    blend_file,
+                    file,
+                    file_new_path
+                )
+                changes.extend(blend_changes)
+
+        return OperationPreview(
+            operation_name=f"Move {old_path.name}/ → {new_path.name}/",
+            changes=changes,
+            warnings=warnings,
+            errors=errors
+        )
+
+    def execute_move_directory(self,
+                              old_path: Path,
+                              new_path: Path,
+                              progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationResult:
+        """Execute directory move with reference updates.
+
+        Args:
+            old_path: Current path of the directory
+            new_path: New path for the directory
+            progress_callback: Optional callback(percentage, message)
+
+        Returns:
+            OperationResult with success status
+        """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
+        try:
+            report_progress(0, "Starting directory move...")
+
+            # Validation
+            if not old_path.exists():
+                return OperationResult(
+                    success=False,
+                    message=f"Source directory does not exist: {old_path}",
+                    errors=[f"Directory not found: {old_path}"]
+                )
+
+            if not old_path.is_dir():
+                return OperationResult(
+                    success=False,
+                    message=f"Source is not a directory: {old_path}",
+                    errors=[f"Not a directory: {old_path}"]
+                )
+
+            if new_path.exists():
+                return OperationResult(
+                    success=False,
+                    message=f"Target directory already exists: {new_path}",
+                    errors=[f"Directory exists: {new_path}"]
+                )
+
+            # Find all .blend and texture files in the directory
+            blend_extensions = ['.blend']
+            texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+            all_extensions = blend_extensions + texture_extensions
+
+            files_to_move = []
+            for ext in all_extensions:
+                files_to_move.extend(old_path.rglob(f'*{ext}'))
+
+            report_progress(5, f"Found {len(files_to_move)} files to move...")
+
+            # Build mapping of old paths to new paths
+            file_mappings = []
+            for file in files_to_move:
+                rel_path = file.relative_to(old_path)
+                file_new_path = new_path / rel_path
+                file_mappings.append((file, file_new_path))
+
+            # Find all .blend files in project that might reference files being moved
+            report_progress(10, "Scanning for references...")
+            all_blend_files = self.filesystem.find_blend_files()
+
+            files_to_update = {}  # blend_file -> list of (old, new) tuples
+
+            for blend_file in all_blend_files:
+                # Skip blend files inside the directory being moved
+                try:
+                    blend_file.relative_to(old_path)
+                    continue
+                except ValueError:
+                    pass
+
+                # Check if this blend file references any files being moved
+                for old_file, new_file in file_mappings:
+                    changes = self._scan_blend_for_references(blend_file, old_file, new_file)
+                    has_references = any(c.status != 'error' for c in changes)
+                    if has_references:
+                        if blend_file not in files_to_update:
+                            files_to_update[blend_file] = []
+                        files_to_update[blend_file].append((old_file, new_file))
+
+            # Move the directory
+            report_progress(20, f"Moving directory {old_path.name}/...")
+            shutil.move(str(old_path), str(new_path))
+
+            # Rebase internal paths in all moved .blend files
+            moved_blend_files = [f for f in files_to_move if f.suffix == '.blend']
+            if moved_blend_files:
+                report_progress(30, "Rebasing internal paths in moved .blend files...")
+                script_path = Path(__file__).parent.parent / "blender_lib" / "rebase_blend_paths.py"
+
+                for i, old_blend_path in enumerate(moved_blend_files):
+                    # Calculate new path for this blend file
+                    rel_path = old_blend_path.relative_to(old_path)
+                    new_blend_path = new_path / rel_path
+
+                    progress = 30 + int(20 * i / len(moved_blend_files))
+                    report_progress(progress, f"Rebasing {rel_path}...")
+
+                    # Run rebase script
+                    result = self.runner.run_script(
+                        script_path,
+                        {
+                            "blend-file": str(new_blend_path),  # File at its new location
+                            "old-dir": str(old_blend_path.parent),  # Where it was
+                            "new-dir": str(new_blend_path.parent),  # Where it is now
+                            "dry-run": "false"
+                        },
+                        timeout=120
+                    )
+
+                    # Check for errors
+                    rebase_result = extract_json_from_output(result.stdout)
+                    if not rebase_result.get("success"):
+                        # Log warning but continue
+                        print(f"Warning: Failed to rebase {new_blend_path}: {rebase_result.get('errors')}")
+
+            # Update all .blend files that reference moved files
+            if files_to_update:
+                total_files = len(files_to_update)
+                for i, (blend_file, file_pairs) in enumerate(files_to_update.items()):
+                    progress = 50 + int(45 * i / total_files)
+                    report_progress(progress, f"Updating {blend_file.name}...")
+
+                    # Update all references in this blend file
+                    for old_file, new_file in file_pairs:
+                        self._update_blend_paths(blend_file, old_file, new_file)
+
+            report_progress(100, "Directory move complete!")
+
+            total_changes = len(files_to_move) + sum(len(pairs) for pairs in files_to_update.values())
+
+            # Build success message
+            message = f"Directory moved successfully ({len(files_to_move)} files)"
+            if moved_blend_files:
+                message += f", rebased internal paths in {len(moved_blend_files)} .blend file(s)"
+            if files_to_update:
+                message += f", updated {len(files_to_update)} external file(s)"
+
+            return OperationResult(
+                success=True,
+                message=message,
+                changes_made=total_changes
+            )
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+
+            # Try to rollback the directory move
+            if new_path.exists() and not old_path.exists():
+                try:
+                    shutil.move(str(new_path), str(old_path))
+                    report_progress(0, "Operation failed, rolled back")
+                except Exception:
+                    pass
+
+            return OperationResult(
+                success=False,
+                message=f"Operation failed: {str(e)}",
+                errors=[str(e)]
+            )
+
     def _execute_move_blend_file(self,
                                  old_path: Path,
                                  new_path: Path,

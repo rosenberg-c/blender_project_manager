@@ -83,18 +83,19 @@ class FileBrowserWidget(QWidget):
         self.tree.expandToDepth(1)  # Expand first level
 
     def _on_item_clicked(self, index):
-        """Handle file selection.
+        """Handle file or directory selection.
 
         Args:
             index: QModelIndex of selected item
         """
         file_path = Path(self.model.filePath(index))
 
-        if file_path.is_file():
+        # Emit signal for both files and directories
+        if file_path.is_file() or file_path.is_dir():
             self.file_selected.emit(file_path)
 
     def get_selected_path(self) -> Path | None:
-        """Get the currently selected file path.
+        """Get the currently selected file or directory path.
 
         Returns:
             Path object or None if nothing selected
@@ -104,7 +105,7 @@ class FileBrowserWidget(QWidget):
             return None
 
         file_path = Path(self.model.filePath(indexes[0]))
-        return file_path if file_path.is_file() else None
+        return file_path if (file_path.is_file() or file_path.is_dir()) else None
 
     def save_state(self):
         """Save file browser state (expanded paths and selected file)."""
@@ -124,20 +125,20 @@ class FileBrowserWidget(QWidget):
             if root_path:
                 self._collect_expanded_paths(self.tree.rootIndex(), root_path, expanded_paths)
 
-            # Get selected file
-            selected_file = None
+            # Get selected file or directory
+            selected_item = None
             selected_path = self.get_selected_path()
             if selected_path and root_path:
                 try:
                     # Store as relative path to project root
-                    selected_file = str(selected_path.relative_to(root_path))
+                    selected_item = str(selected_path.relative_to(root_path))
                 except ValueError:
-                    pass  # Selected file is outside project root
+                    pass  # Selected item is outside project root
 
             # Save to config
             file_browser_state = {
                 'expanded_paths': expanded_paths,
-                'selected_file': selected_file
+                'selected_file': selected_item  # Name kept for backward compatibility
             }
             config_data['file_browser'] = file_browser_state
 
@@ -233,11 +234,11 @@ class FileBrowserWidget(QWidget):
                     pending.discard(rel_path)
                     expanded_any = True
 
-        # If no more pending expansions, restore selected file
+        # If no more pending expansions, restore selected file or directory
         if not pending and self.restore_data.get('selected_file'):
-            selected_file = self.restore_data['selected_file']
-            full_path = root_path / selected_file
-            if full_path.exists() and full_path.is_file():
+            selected_item = self.restore_data['selected_file']
+            full_path = root_path / selected_item
+            if full_path.exists() and (full_path.is_file() or full_path.is_dir()):
                 index = self.model.index(str(full_path))
                 if index.isValid():
                     self.tree.setCurrentIndex(index)

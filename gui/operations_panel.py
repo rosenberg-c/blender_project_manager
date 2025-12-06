@@ -71,12 +71,12 @@ class OperationsPanelWidget(QWidget):
         self.create_link_tab()
 
     def create_move_tab(self):
-        """Create the Move/Rename file tab."""
+        """Create the Move/Rename file or directory tab."""
         tab = QWidget()
         tab_layout = QVBoxLayout(tab)
 
         # Move/Rename section
-        move_label = QLabel("<b>Move/Rename File:</b>")
+        move_label = QLabel("<b>Move/Rename File or Directory:</b>")
         tab_layout.addWidget(move_label)
 
         # New path input
@@ -114,7 +114,7 @@ class OperationsPanelWidget(QWidget):
         tab_layout.addStretch()
 
         # Add tab to tabs widget
-        self.tabs.addTab(tab, "Move/Rename File")
+        self.tabs.addTab(tab, "Move/Rename")
 
     def create_rename_objects_tab(self):
         """Create the Rename Objects/Collections tab."""
@@ -338,13 +338,20 @@ class OperationsPanelWidget(QWidget):
         self.tabs.addTab(tab, "Link Objects")
 
     def set_file(self, file_path: Path):
-        """Set the currently selected file.
+        """Set the currently selected file or directory.
 
         Args:
-            file_path: Path to the selected file
+            file_path: Path to the selected file or directory
         """
         self.current_file = file_path
-        self.file_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
+
+        # Check if it's a directory
+        is_directory = file_path.is_dir()
+
+        if is_directory:
+            self.file_display.setText(f"<b>{file_path.name}/</b><br><small>{str(file_path)}</small>")
+        else:
+            self.file_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
 
         # Determine file type
         is_blend = file_path.suffix == '.blend'
@@ -774,7 +781,8 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.information(self, "No Change", "Source and target are the same.")
             return
 
-        # Check file type
+        # Check file/directory type
+        is_directory = self.current_file.is_dir()
         is_blend = self.current_file.suffix == '.blend'
         is_texture = self.current_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
 
@@ -785,7 +793,20 @@ class OperationsPanelWidget(QWidget):
         QApplication.processEvents()  # Force UI update
 
         try:
-            if is_blend:
+            if is_directory:
+                # Handle directories - use controller which auto-detects
+                preview = self.controller.preview_move_file(self.current_file, new_path)
+
+                # Restore normal state
+                QApplication.restoreOverrideCursor()
+                self.preview_btn.setText("Preview Changes")
+                self.preview_btn.setEnabled(True)
+
+                # Show preview dialog
+                dialog = OperationPreviewDialog(preview, self)
+                dialog.exec()
+
+            elif is_blend:
                 # Get preview from controller for .blend files
                 preview = self.controller.preview_move_file(self.current_file, new_path)
 
@@ -872,7 +893,7 @@ class OperationsPanelWidget(QWidget):
                     self,
                     "Unsupported File Type",
                     f"Cannot preview move operation for {self.current_file.suffix} files.\n\n"
-                    "Supported: .blend files and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
+                    "Supported: directories, .blend files, and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
                 )
 
         except Exception as e:
@@ -899,16 +920,18 @@ class OperationsPanelWidget(QWidget):
             QMessageBox.information(self, "No Change", "Source and target are the same.")
             return
 
-        # Check file type
+        # Check file/directory type
+        is_directory = self.current_file.is_dir()
         is_blend = self.current_file.suffix == '.blend'
         is_texture = self.current_file.suffix.lower() in ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
 
         # Confirm with user
+        item_type = "directory" if is_directory else "file"
         reply = QMessageBox.question(
             self,
             "Confirm Operation",
-            f"Move/rename file?\n\nFrom: {self.current_file}\nTo: {new_path}\n\n"
-            "All .blend files referencing this file will be updated.",
+            f"Move/rename {item_type}?\n\nFrom: {self.current_file}\nTo: {new_path}\n\n"
+            "All .blend files referencing this will be updated.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -925,7 +948,58 @@ class OperationsPanelWidget(QWidget):
         QApplication.processEvents()  # Force UI update
 
         try:
-            if is_blend:
+            if is_directory:
+                # Handle directories - use controller which auto-detects
+                progress_dialog = OperationProgressDialog(
+                    f"Moving {self.current_file.name}/",
+                    self
+                )
+                progress_dialog.show()
+                QApplication.processEvents()
+
+                result = self.controller.execute_move_file(
+                    self.current_file,
+                    new_path,
+                    progress_dialog.update_progress
+                )
+
+                QApplication.restoreOverrideCursor()
+
+                if result.success:
+                    progress_dialog.update_progress(100, result.message)
+                    progress_dialog.exec()
+
+                    QMessageBox.information(
+                        self,
+                        "Success",
+                        f"{result.message}\n\n{result.changes_made} changes made."
+                    )
+
+                    # Clear selection
+                    self.current_file = None
+                    self.file_display.setText("<i>No file selected</i>")
+                    self.new_path_input.clear()
+                    self.browse_btn.setEnabled(False)
+                    self.preview_btn.setEnabled(False)
+                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setEnabled(False)
+                else:
+                    progress_dialog.mark_error(result.message)
+                    progress_dialog.exec()
+
+                    QMessageBox.critical(
+                        self,
+                        "Error",
+                        f"Operation failed:\n\n{result.message}"
+                    )
+
+                    # Restore button state on error
+                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setEnabled(True)
+                    self.preview_btn.setEnabled(True)
+                    self.browse_btn.setEnabled(True)
+
+            elif is_blend:
                 # Create and show progress dialog immediately
                 progress_dialog = OperationProgressDialog(
                     f"Moving {self.current_file.name}",
@@ -1077,7 +1151,7 @@ class OperationsPanelWidget(QWidget):
                     self,
                     "Unsupported File Type",
                     f"Cannot execute move operation for {self.current_file.suffix} files.\n\n"
-                    "Supported: .blend files and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
+                    "Supported: directories, .blend files, and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
                 )
 
         except Exception as e:

@@ -19,32 +19,36 @@ class FileOperationsController:
         self.project = project_controller
 
     def preview_move_file(self, old_path: Path, new_path: Path) -> OperationPreview:
-        """Preview what will change when moving a file.
+        """Preview what will change when moving a file or directory.
 
         Args:
-            old_path: Current path of the file
-            new_path: New path for the file
+            old_path: Current path of the file or directory
+            new_path: New path for the file or directory
 
         Returns:
             OperationPreview with list of changes
         """
         if not self.project.is_open or not self.project.blender_service:
             return OperationPreview(
-                operation_name="Move File",
+                operation_name="Move File" if old_path.is_file() else "Move Directory",
                 errors=["No project is open"]
             )
 
-        return self.project.blender_service.preview_move_file(old_path, new_path)
+        # Auto-detect file vs directory
+        if old_path.is_dir():
+            return self.project.blender_service.preview_move_directory(old_path, new_path)
+        else:
+            return self.project.blender_service.preview_move_file(old_path, new_path)
 
     def execute_move_file(self,
                          old_path: Path,
                          new_path: Path,
                          progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationResult:
-        """Execute file move operation.
+        """Execute file or directory move operation.
 
         Args:
-            old_path: Current path of the file
-            new_path: New path for the file
+            old_path: Current path of the file or directory
+            new_path: New path for the file or directory
             progress_callback: Optional callback for progress updates
 
         Returns:
@@ -57,11 +61,19 @@ class FileOperationsController:
                 errors=["No project is open"]
             )
 
-        return self.project.blender_service.execute_move_file(
-            old_path,
-            new_path,
-            progress_callback
-        )
+        # Auto-detect file vs directory
+        if old_path.is_dir():
+            return self.project.blender_service.execute_move_directory(
+                old_path,
+                new_path,
+                progress_callback
+            )
+        else:
+            return self.project.blender_service.execute_move_file(
+                old_path,
+                new_path,
+                progress_callback
+            )
 
     def validate_move(self, old_path: Path, new_path: Path) -> tuple[bool, list[str]]:
         """Validate if a file move is possible.
