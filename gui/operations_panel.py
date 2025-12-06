@@ -7,7 +7,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QFileDialog, QMessageBox, QApplication,
-    QTabWidget, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QRadioButton, QButtonGroup
+    QTabWidget, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QRadioButton, QButtonGroup,
+    QScrollArea
 )
 from PySide6.QtGui import QCursor
 
@@ -72,8 +73,14 @@ class OperationsPanelWidget(QWidget):
 
     def create_move_tab(self):
         """Create the Move/Rename file or directory tab."""
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        # Create content widget
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
 
         # Move/Rename section
         move_label = QLabel("<b>Move/Rename File or Directory:</b>")
@@ -113,13 +120,22 @@ class OperationsPanelWidget(QWidget):
         # Add stretch to push everything to top
         tab_layout.addStretch()
 
+        # Set content widget in scroll area
+        scroll.setWidget(content)
+
         # Add tab to tabs widget
-        self.tabs.addTab(tab, "Move/Rename")
+        self.tabs.addTab(scroll, "Move/Rename")
 
     def create_rename_objects_tab(self):
         """Create the Rename Objects/Collections tab."""
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        # Create content widget
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
 
         info_label = QLabel("<b>Rename Objects/Collections:</b>")
         tab_layout.addWidget(info_label)
@@ -202,13 +218,22 @@ class OperationsPanelWidget(QWidget):
         # Add stretch
         tab_layout.addStretch()
 
+        # Set content widget in scroll area
+        scroll.setWidget(content)
+
         # Add tab to tabs widget
-        self.tabs.addTab(tab, "Rename Objects")
+        self.tabs.addTab(scroll, "Rename Objects")
 
     def create_link_tab(self):
         """Create the Link Objects/Collections tab."""
-        tab = QWidget()
-        tab_layout = QVBoxLayout(tab)
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        # Create content widget
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
 
         info_label = QLabel("<b>Link Objects/Collections:</b>")
         tab_layout.addWidget(info_label)
@@ -334,8 +359,11 @@ class OperationsPanelWidget(QWidget):
         # Add stretch
         tab_layout.addStretch()
 
+        # Set content widget in scroll area
+        scroll.setWidget(content)
+
         # Add tab to tabs widget
-        self.tabs.addTab(tab, "Link Objects")
+        self.tabs.addTab(scroll, "Link Objects")
 
     def set_file(self, file_path: Path):
         """Set the currently selected file or directory.
