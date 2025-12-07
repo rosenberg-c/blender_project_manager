@@ -1,7 +1,7 @@
 """Utilities tab for project cleanup operations."""
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox
+    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox, QTabWidget
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
@@ -30,6 +30,24 @@ class UtilitiesTab(BaseOperationTab):
 
     def setup_ui(self):
         """Create the UI for the utilities tab."""
+        # Create main layout for this tab
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create tab widget for sub-tabs
+        self.sub_tabs = QTabWidget()
+        layout.addWidget(self.sub_tabs)
+
+        # Create Clean tab
+        clean_tab = self._create_clean_tab()
+        self.sub_tabs.addTab(clean_tab, "Clean")
+
+        # Create Library tab
+        library_tab = self._create_library_tab()
+        self.sub_tabs.addTab(library_tab, "Library")
+
+    def _create_clean_tab(self):
+        """Create the Clean sub-tab for cleanup operations."""
         # Create scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -39,10 +57,10 @@ class UtilitiesTab(BaseOperationTab):
         content = QWidget()
         tab_layout = QVBoxLayout(content)
 
-        info_label = QLabel("<b>Project Utilities:</b>")
+        info_label = QLabel("<b>Cleanup Operations:</b>")
         tab_layout.addWidget(info_label)
 
-        desc_label = QLabel("Tools for managing and cleaning up your project.")
+        desc_label = QLabel("Tools for cleaning up your project and freeing disk space.")
         desc_label.setWordWrap(True)
         tab_layout.addWidget(desc_label)
 
@@ -61,10 +79,36 @@ class UtilitiesTab(BaseOperationTab):
         self.clean_blend1_btn.setToolTip("Remove all .blend1 and .blend2 backup files from the project")
         tab_layout.addWidget(self.clean_blend1_btn)
 
-        tab_layout.addSpacing(20)
+        # Add stretch to push everything to top
+        tab_layout.addStretch()
+
+        # Set content widget in scroll area
+        scroll.setWidget(content)
+
+        return scroll
+
+    def _create_library_tab(self):
+        """Create the Library sub-tab for library operations."""
+        # Create scroll area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        # Create content widget
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
+
+        info_label = QLabel("<b>Library Operations:</b>")
+        tab_layout.addWidget(info_label)
+
+        desc_label = QLabel("Tools for managing library links in your .blend files.")
+        desc_label.setWordWrap(True)
+        tab_layout.addWidget(desc_label)
+
+        tab_layout.addSpacing(10)
 
         # Reload library links section
-        library_label = QLabel("<b>Library Links:</b>")
+        library_label = QLabel("<b>Reload Library Links:</b>")
         tab_layout.addWidget(library_label)
 
         library_desc = QLabel(
@@ -85,10 +129,7 @@ class UtilitiesTab(BaseOperationTab):
         # Set content widget in scroll area
         scroll.setWidget(content)
 
-        # Set the main layout for this tab
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(scroll)
+        return scroll
 
     def _clean_blend1_files(self):
         """Remove all .blend1 and .blend2 backup files from the project."""
