@@ -3,18 +3,22 @@
 import json
 import subprocess
 import platform
+import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QModelIndex
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLineEdit,
-    QTreeView, QFileSystemModel, QMessageBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
+    QTreeView, QFileSystemModel, QMessageBox, QPushButton
 )
 
 from controllers.project_controller import ProjectController
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
-    MSG_BLENDER_NOT_CONFIGURED, TMPL_FAILED_TO_OPEN_BLENDER
+    TITLE_CONFIRM_DELETION, TITLE_SUCCESS, TITLE_ERROR,
+    MSG_BLENDER_NOT_CONFIGURED, TMPL_FAILED_TO_OPEN_BLENDER,
+    TMPL_CONFIRM_DELETE_FILE, TMPL_CONFIRM_DELETE_DIR,
+    TMPL_DELETE_SUCCESS, TMPL_DELETE_FAILED
 )
 
 
@@ -48,6 +52,10 @@ class FileBrowserWidget(QWidget):
         self.search_box.setPlaceholderText("Search files...")
         layout.addWidget(self.search_box)
 
+        # Horizontal layout for tree and delete button
+        tree_layout = QHBoxLayout()
+        tree_layout.setContentsMargins(0, 0, 0, 0)
+
         # Tree view with file system model
         self.tree = QTreeView()
         self.model = QFileSystemModel()
@@ -72,11 +80,23 @@ class FileBrowserWidget(QWidget):
 
         # Connect selection signal
         self.tree.clicked.connect(self._on_item_clicked)
+        self.tree.selectionModel().selectionChanged.connect(self._on_selection_changed)
 
         # Connect double-click signal to open in Blender
         self.tree.doubleClicked.connect(self._on_item_double_clicked)
 
-        layout.addWidget(self.tree)
+        tree_layout.addWidget(self.tree)
+
+        # Delete button with trash icon
+        self.delete_btn = QPushButton()
+        self.delete_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_TrashIcon))
+        self.delete_btn.setToolTip("Delete selected file or directory")
+        self.delete_btn.setFixedWidth(40)
+        self.delete_btn.setEnabled(False)  # Disabled until something is selected
+        self.delete_btn.clicked.connect(self._delete_selected)
+        tree_layout.addWidget(self.delete_btn)
+
+        layout.addLayout(tree_layout)
 
         # State restoration data
         self.restore_data = None
@@ -150,6 +170,57 @@ class FileBrowserWidget(QWidget):
                     file_name=file_path.name,
                     error=str(e)
                 )
+            )
+
+    def _on_selection_changed(self):
+        """Handle selection changes to enable/disable delete button."""
+        selected_path = self.get_selected_path()
+        self.delete_btn.setEnabled(selected_path is not None)
+
+    def _delete_selected(self):
+        """Delete the currently selected file or directory."""
+        selected_path = self.get_selected_path()
+        if not selected_path:
+            return
+
+        # Show confirmation dialog
+        if selected_path.is_dir():
+            message = TMPL_CONFIRM_DELETE_DIR.format(dir_path=str(selected_path))
+        else:
+            message = TMPL_CONFIRM_DELETE_FILE.format(file_path=str(selected_path))
+
+        reply = QMessageBox.question(
+            self,
+            TITLE_CONFIRM_DELETION,
+            message,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Perform deletion
+        try:
+            if selected_path.is_dir():
+                shutil.rmtree(selected_path)
+            else:
+                selected_path.unlink()
+
+            QMessageBox.information(
+                self,
+                TITLE_SUCCESS,
+                TMPL_DELETE_SUCCESS.format(path=str(selected_path))
+            )
+
+            # Clear selection
+            self.tree.clearSelection()
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                TITLE_ERROR,
+                TMPL_DELETE_FAILED.format(path=str(selected_path), error=str(e))
             )
 
     def get_selected_path(self) -> Path | None:

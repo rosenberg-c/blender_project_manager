@@ -91,3 +91,8 @@ TMPL_CONFIRM_DELETE_BACKUPS = "Found {count} backup file(s):\n  • {blend1_coun
 
 TMPL_SUCCESS_WITH_CHANGES = "{message}\n\n{changes} changes made."
 TMPL_LINK_COMPLETE = "{message}\n\n{changes} item(s) linked."
+
+TMPL_CONFIRM_DELETE_FILE = "Are you sure you want to delete this file?\n\n{file_path}\n\nThis action cannot be undone."
+TMPL_CONFIRM_DELETE_DIR = "Are you sure you want to delete this directory and all its contents?\n\n{dir_path}\n\nThis action cannot be undone."
+TMPL_DELETE_SUCCESS = "Successfully deleted:\n{path}"
+TMPL_DELETE_FAILED = "Failed to delete:\n{path}\n\nError: {error}"
