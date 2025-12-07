@@ -46,6 +46,20 @@ class UtilitiesTab(BaseOperationTab):
         library_tab = self._create_library_tab()
         self.sub_tabs.addTab(library_tab, "Library")
 
+    def set_file(self, file_path):
+        """Set the currently selected file and update button states.
+
+        Args:
+            file_path: Path to the selected file
+        """
+        super().set_file(file_path)
+
+        # Enable find references button only for .blend files
+        if file_path and self.is_blend_file(file_path):
+            self.find_references_btn.setEnabled(True)
+        else:
+            self.find_references_btn.setEnabled(False)
+
     def _create_clean_tab(self):
         """Create the Clean sub-tab for cleanup operations."""
         # Create scroll area
@@ -137,6 +151,25 @@ class UtilitiesTab(BaseOperationTab):
         self.reload_libraries_btn.clicked.connect(self._reload_libraries)
         self.reload_libraries_btn.setToolTip("Reload all library links in all .blend files in the project")
         tab_layout.addWidget(self.reload_libraries_btn)
+
+        tab_layout.addSpacing(20)
+
+        # Find references section
+        find_refs_label = QLabel("<b>Find References:</b>")
+        tab_layout.addWidget(find_refs_label)
+
+        find_refs_desc = QLabel(
+            "Find all .blend files in your project that reference (link to) the selected .blend file. "
+            "Useful for understanding file dependencies."
+        )
+        find_refs_desc.setWordWrap(True)
+        tab_layout.addWidget(find_refs_desc)
+
+        self.find_references_btn = QPushButton("Find References to Selected File")
+        self.find_references_btn.clicked.connect(self._find_references)
+        self.find_references_btn.setToolTip("Find all files that link to the selected .blend file")
+        self.find_references_btn.setEnabled(False)  # Enabled when .blend file is selected
+        tab_layout.addWidget(self.find_references_btn)
 
         # Add stretch to push everything to top
         tab_layout.addStretch()
@@ -382,3 +415,113 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, f"Failed to reload library links:\n\n{str(e)}")
+
+    def _find_references(self):
+        """Find all .blend files that reference the selected .blend file."""
+        if not self.controller.project.is_open:
+            self.show_warning(TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
+            return
+
+        if not self.current_file or not self.is_blend_file(self.current_file):
+            self.show_warning("No .blend File", "Please select a .blend file first.")
+            return
+
+        try:
+            from pathlib import Path
+            from blender_lib.constants import TIMEOUT_VERY_LONG
+            from services.blender_service import extract_json_from_output
+
+            # Run the find references script
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "find_references.py"
+            project_root = self.get_project_root()
+
+            # Show loading cursor
+            def find_operation():
+                result = runner.run_script(
+                    script_path,
+                    {
+                        "target-file": str(self.current_file),
+                        "project-root": str(project_root)
+                    },
+                    timeout=TIMEOUT_VERY_LONG
+                )
+                return result
+
+            result = self.with_loading_cursor(find_operation)
+
+            # Parse JSON output
+            data = extract_json_from_output(result.stdout)
+
+            if not data.get("success", False):
+                errors = data.get("errors", [])
+                raise Exception(errors[0] if errors else "Unknown error")
+
+            # Show results
+            target_name = data.get("target_name", self.current_file.name)
+            referencing_files = data.get("referencing_files", [])
+            files_scanned = data.get("files_scanned", 0)
+            errors = data.get("errors", [])
+            warnings = data.get("warnings", [])
+
+            message_parts = []
+
+            if not referencing_files:
+                message_parts.append(f"<b>No references found to '{target_name}'</b><br>")
+                message_parts.append(f"<br>Scanned {files_scanned} .blend file(s) in the project.<br>")
+                message_parts.append(f"<br><i>This file is not linked by any other .blend files.</i><br>")
+            else:
+                message_parts.append(f"<b>Found {len(referencing_files)} file(s) referencing '{target_name}':</b><br><br>")
+
+                for ref in referencing_files[:10]:  # Show first 10
+                    file_name = ref.get("file_name", "Unknown")
+                    linked_objects = ref.get("linked_objects_count", 0)
+                    linked_collections = ref.get("linked_collections_count", 0)
+
+                    message_parts.append(f"<b>• {file_name}</b><br>")
+
+                    if linked_objects > 0:
+                        message_parts.append(f"  Linked objects: {linked_objects}")
+                        obj_names = ref.get("linked_objects", [])
+                        if obj_names:
+                            message_parts.append(f" ({', '.join(obj_names[:3])}")
+                            if len(obj_names) > 3:
+                                message_parts.append(f", +{len(obj_names) - 3} more")
+                            message_parts.append(")")
+                        message_parts.append("<br>")
+
+                    if linked_collections > 0:
+                        message_parts.append(f"  Linked collections: {linked_collections}")
+                        col_names = ref.get("linked_collections", [])
+                        if col_names:
+                            message_parts.append(f" ({', '.join(col_names[:3])}")
+                            if len(col_names) > 3:
+                                message_parts.append(f", +{len(col_names) - 3} more")
+                            message_parts.append(")")
+                        message_parts.append("<br>")
+
+                    message_parts.append("<br>")
+
+                if len(referencing_files) > 10:
+                    message_parts.append(f"<i>... and {len(referencing_files) - 10} more file(s)</i><br>")
+
+                message_parts.append(f"<br>Total files scanned: {files_scanned}<br>")
+
+            if warnings:
+                message_parts.append(f"<br><b>Warnings:</b><br>")
+                for warning in warnings[:5]:
+                    message_parts.append(f"  • {warning}<br>")
+                if len(warnings) > 5:
+                    message_parts.append(f"  ... and {len(warnings) - 5} more<br>")
+
+            if errors:
+                message_parts.append(f"<br><b>Errors:</b><br>")
+                for error in errors[:5]:
+                    message_parts.append(f"  • {error}<br>")
+                if len(errors) > 5:
+                    message_parts.append(f"  ... and {len(errors) - 5} more<br>")
+
+            self.show_info("Find References Results", "".join(message_parts))
+
+        except Exception as e:
+            self.show_error(TITLE_ERROR, f"Failed to find references:\n\n{str(e)}")
