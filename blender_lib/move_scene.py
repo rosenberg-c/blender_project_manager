@@ -1,11 +1,14 @@
 """Blender script to move a .blend file and rebase all internal relative paths."""
 
 import bpy
-import json
 import sys
 import argparse
 import os
 import shutil
+
+# Import shared utilities
+sys.path.insert(0, os.path.dirname(__file__))
+from script_utils import output_json, create_error_result, create_success_result
 
 
 def rebase_relative_path(original_path, old_scene_dir, new_scene_dir):
@@ -164,21 +167,19 @@ if __name__ == "__main__":
         result = move_scene_and_rebase(old_scene_abs, new_scene_abs, delete_old, dry_run)
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(result)
 
         sys.exit(0)
 
     except Exception as e:
         import traceback
-        error_result = {
-            "success": False,
-            "file_moved": False,
-            "old_deleted": False,
-            "rebased_images": [],
-            "rebased_libraries": [],
-            "errors": [str(e)],
-            "warnings": [],
-            "traceback": traceback.format_exc()
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        error_result = create_error_result(
+            str(e),
+            file_moved=False,
+            old_deleted=False,
+            rebased_images=[],
+            rebased_libraries=[],
+            traceback=traceback.format_exc()
+        )
+        output_json(error_result)
         sys.exit(1)

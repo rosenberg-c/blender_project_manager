@@ -1,7 +1,6 @@
 """Blender script to rebase internal paths in a .blend file after it has been moved."""
 
 import bpy
-import json
 import sys
 import argparse
 import os
@@ -9,6 +8,9 @@ from pathlib import Path
 
 # Add parent directory to path so we can import core module
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import shared utilities
+from blender_lib.script_utils import output_json, create_error_result, create_success_result
 
 from core.path_utils import rebase_relative_path
 
@@ -167,16 +169,15 @@ if __name__ == "__main__":
         result = rebase_blend_file(blend_path, old_dir, new_dir, moved_files, dry_run)
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(result)
 
         sys.exit(0)
 
     except Exception as e:
         import traceback
-        error_result = {
-            "success": False,
-            "errors": [str(e)],
-            "traceback": traceback.format_exc()
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        error_result = create_error_result(
+            str(e),
+            traceback=traceback.format_exc()
+        )
+        output_json(error_result)
         sys.exit(1)

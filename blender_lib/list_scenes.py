@@ -1,9 +1,14 @@
 """Blender script to list all scenes in a .blend file."""
 
 import bpy
-import json
 import sys
 import argparse
+
+# Import shared utilities
+import os
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from script_utils import output_json, create_error_result, create_success_result
 
 
 def list_scenes():
@@ -47,14 +52,10 @@ if __name__ == "__main__":
         result = list_scenes()
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(create_success_result(**result))
 
         sys.exit(0)
 
     except Exception as e:
-        error_result = {
-            "error": str(e),
-            "scenes": []
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        output_json(create_error_result(str(e), scenes=[]))
         sys.exit(1)

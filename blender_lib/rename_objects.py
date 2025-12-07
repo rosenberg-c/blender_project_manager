@@ -1,7 +1,6 @@
 """Blender script to rename objects and collections and update linked references."""
 
 import bpy
-import json
 import sys
 import argparse
 import os
@@ -10,6 +9,8 @@ from pathlib import Path
 # Add parent directory to path so we can import core module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Import shared utilities
+from blender_lib.script_utils import output_json, create_error_result, create_success_result
 from core.file_scanner import find_blend_files
 
 
@@ -271,20 +272,18 @@ if __name__ == "__main__":
             result["updated_files_count"] = 0
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(result)
 
         sys.exit(0)
 
     except Exception as e:
         import traceback
-        error_result = {
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "renamed": [],
-            "errors": [str(e)],
-            "warnings": [],
-            "updated_files": [],
-            "updated_files_count": 0
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        error_result = create_error_result(
+            str(e),
+            traceback=traceback.format_exc(),
+            renamed=[],
+            updated_files=[],
+            updated_files_count=0
+        )
+        output_json(error_result)
         sys.exit(1)

@@ -1,10 +1,14 @@
 """Blender script to link objects/collections from one .blend file to another."""
 
 import bpy
-import json
 import sys
 import argparse
 from pathlib import Path
+import os
+
+# Import shared utilities
+sys.path.insert(0, os.path.dirname(__file__))
+from script_utils import output_json, create_error_result, create_success_result
 
 
 def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True):
@@ -399,17 +403,14 @@ if __name__ == "__main__":
         )
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(result)
 
         sys.exit(0 if result["success"] else 1)
 
     except Exception as e:
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "linked_items": [],
-            "errors": [str(e)],
-            "warnings": []
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        error_result = create_error_result(
+            str(e),
+            linked_items=[]
+        )
+        output_json(error_result)
         sys.exit(1)

@@ -35,6 +35,7 @@ from gui.ui_strings import (
     TMPL_CONFIRM_DELETE_BACKUPS, TMPL_SUCCESS_WITH_CHANGES, TMPL_LINK_COMPLETE,
     TMPL_FAILED_TO_CLEAN
 )
+from blender_lib.constants import TIMEOUT_SHORT, TIMEOUT_MEDIUM
 
 
 class OperationsPanelWidget(QWidget):
@@ -533,7 +534,7 @@ class OperationsPanelWidget(QWidget):
             result = runner.run_script(
                 script_path,
                 {"blend-file": str(self.current_file)},
-                timeout=60
+                timeout=TIMEOUT_SHORT
             )
 
             # Debug: print stdout
@@ -737,7 +738,7 @@ class OperationsPanelWidget(QWidget):
                     "replace": replace_text,
                     "dry-run": "true" if dry_run else "false"
                 },
-                timeout=120  # Longer timeout for processing multiple files
+                timeout=TIMEOUT_MEDIUM  # Longer timeout for processing multiple files
             )
 
             # Parse JSON output
@@ -923,7 +924,7 @@ class OperationsPanelWidget(QWidget):
                         "project-root": str(project_root),
                         "dry-run": "true"
                     },
-                    timeout=120
+                    timeout=TIMEOUT_MEDIUM
                 )
 
                 # Parse JSON output
@@ -1166,7 +1167,7 @@ class OperationsPanelWidget(QWidget):
                         "project-root": str(project_root),
                         "dry-run": "false"
                     },
-                    timeout=120
+                    timeout=TIMEOUT_MEDIUM
                 )
 
                 # Parse JSON output
@@ -1384,7 +1385,7 @@ class OperationsPanelWidget(QWidget):
             result = runner.run_script(
                 script_path,
                 {"blend-file": str(self.link_source_file)},
-                timeout=60
+                timeout=TIMEOUT_SHORT
             )
 
             # Parse JSON output

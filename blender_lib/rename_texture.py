@@ -1,11 +1,14 @@
 """Blender script to rename texture files and update all .blend file references."""
 
 import bpy
-import json
 import sys
 import argparse
 import os
 import shutil
+
+# Import shared utilities
+sys.path.insert(0, os.path.dirname(__file__))
+from script_utils import output_json, create_error_result, create_success_result
 
 
 def find_blend_files(root_path):
@@ -215,21 +218,18 @@ if __name__ == "__main__":
             result["warnings"].extend(update_result["warnings"])
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(result)
 
         sys.exit(0)
 
     except Exception as e:
         import traceback
-        error_result = {
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "file_moved": False,
-            "updated_files": [],
-            "updated_files_count": 0,
-            "errors": [str(e)],
-            "warnings": []
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        error_result = create_error_result(
+            str(e),
+            traceback=traceback.format_exc(),
+            file_moved=False,
+            updated_files=[],
+            updated_files_count=0
+        )
+        output_json(error_result)
         sys.exit(1)

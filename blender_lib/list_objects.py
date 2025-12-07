@@ -1,9 +1,13 @@
 """Blender script to list objects and collections in a .blend file."""
 
 import bpy
-import json
 import sys
 import argparse
+
+# Import shared utilities
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+from script_utils import output_json, create_error_result, create_success_result
 
 
 def list_objects_and_collections():
@@ -52,15 +56,10 @@ if __name__ == "__main__":
         result = list_objects_and_collections()
 
         # Output as JSON
-        print("JSON_OUTPUT:" + json.dumps(result, indent=2))
+        output_json(create_success_result(**result))
 
         sys.exit(0)
 
     except Exception as e:
-        error_result = {
-            "error": str(e),
-            "objects": [],
-            "collections": []
-        }
-        print("JSON_OUTPUT:" + json.dumps(error_result, indent=2))
+        output_json(create_error_result(str(e), objects=[], collections=[]))
         sys.exit(1)

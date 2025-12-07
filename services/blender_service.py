@@ -8,10 +8,11 @@ from typing import Callable, List, Optional
 
 from blender_lib.blender_runner import BlenderRunner
 from blender_lib.models import OperationPreview, OperationResult, PathChange, LinkOperationParams
+from blender_lib.script_utils import JSON_OUTPUT_MARKER
 from services.filesystem_service import FilesystemService
 
 
-def extract_json_from_output(output: str, marker: str = "JSON_OUTPUT:") -> dict:
+def extract_json_from_output(output: str, marker: str = JSON_OUTPUT_MARKER) -> dict:
     """Extract JSON data from Blender output.
 
     Blender output often contains additional text after JSON like "Blender quit".
