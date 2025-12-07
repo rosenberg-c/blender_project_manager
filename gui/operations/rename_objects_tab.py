@@ -95,6 +95,13 @@ class RenameObjectsTab(BaseOperationTab):
         self.obj_find_input.setPlaceholderText("Text to find...")
         rename_layout.addWidget(self.obj_find_input)
 
+        # Copy button
+        self.obj_copy_btn = QPushButton("→")
+        self.obj_copy_btn.setMaximumWidth(40)
+        self.obj_copy_btn.setToolTip("Copy 'Find' text to 'Replace' field")
+        self.obj_copy_btn.clicked.connect(self._copy_find_to_replace)
+        rename_layout.addWidget(self.obj_copy_btn)
+
         # Replace pattern
         replace_label = QLabel("Replace:")
         rename_layout.addWidget(replace_label)
@@ -268,6 +275,11 @@ class RenameObjectsTab(BaseOperationTab):
                 # For now, just show the first name as a hint
                 # User can modify to create a pattern
                 self.obj_find_input.setText(names[0])
+
+    def _copy_find_to_replace(self):
+        """Copy the 'Find' text to the 'Replace' field."""
+        find_text = self.obj_find_input.text()
+        self.obj_replace_input.setText(find_text)
 
     def _preview_rename_objects(self):
         """Preview the rename operation for objects/collections."""
