@@ -41,6 +41,7 @@ cache/
 
 # User config
 ~/.blender_project_manager/
+.claude
 
 # Logs
 *.log
