@@ -8,7 +8,7 @@ import pytest
 class TestRemoveEmptyDirectories:
     """Tests for removing empty directories functionality."""
 
-    def test_finds_empty_directories(self, tmp_path):
+    def test_finds_empty_directories(self, qapp, tmp_path):
         """Test that empty directories are correctly identified."""
         # Setup: Create directory structure with empty and non-empty dirs
         project_root = tmp_path / "project"
@@ -49,23 +49,26 @@ class TestRemoveEmptyDirectories:
         tab._remove_empty_directories()
 
         # Verify: confirm was called with correct count
+        # Initial scan finds 2 directories (empty1 and empty2)
+        # After removing empty2, subdir becomes empty too
         assert tab.confirm.called
         confirm_args = tab.confirm.call_args[0]
         assert "2 empty directories" in confirm_args[1]
 
-        # Verify: Both empty directories were removed
+        # Verify: All empty directories were removed (including parent that became empty)
         assert not empty1.exists(), "empty1 should be removed"
         assert not empty2.exists(), "empty2 should be removed"
+        assert not empty2.parent.exists(), "subdir should be removed (became empty after empty2 removed)"
 
         # Verify: Non-empty directory still exists
         assert non_empty.exists(), "non_empty should still exist"
 
-        # Verify: Success message was shown
+        # Verify: Success message shows total removed (including nested parents)
         assert tab.show_info.called
         info_args = tab.show_info.call_args[0]
-        assert "Successfully removed 2 empty directories" in info_args[1]
+        assert "Successfully removed 3 empty directories" in info_args[1]
 
-    def test_handles_nested_empty_directories(self, tmp_path):
+    def test_handles_nested_empty_directories(self, qapp, tmp_path):
         """Test that nested empty directories are all removed."""
         # Setup: Create nested empty directories
         project_root = tmp_path / "project"
@@ -98,7 +101,7 @@ class TestRemoveEmptyDirectories:
         info_args = tab.show_info.call_args[0]
         assert "Successfully removed 3 empty directories" in info_args[1]
 
-    def test_no_empty_directories_found(self, tmp_path):
+    def test_no_empty_directories_found(self, qapp, tmp_path):
         """Test behavior when no empty directories exist."""
         # Setup: Project with only non-empty directories
         project_root = tmp_path / "project"
@@ -132,7 +135,7 @@ class TestRemoveEmptyDirectories:
         # Verify: Confirm was NOT called (nothing to remove)
         assert not tab.confirm.called
 
-    def test_user_cancels_removal(self, tmp_path):
+    def test_user_cancels_removal(self, qapp, tmp_path):
         """Test that directories are not removed when user cancels."""
         # Setup: Create empty directory
         project_root = tmp_path / "project"
@@ -163,7 +166,7 @@ class TestRemoveEmptyDirectories:
         # Verify: No success message shown
         assert not tab.show_info.called
 
-    def test_handles_permission_errors(self, tmp_path):
+    def test_handles_permission_errors(self, qapp, tmp_path):
         """Test that permission errors are handled gracefully."""
         # Setup: Create directory structure
         project_root = tmp_path / "project"
@@ -202,7 +205,7 @@ class TestRemoveEmptyDirectories:
         assert "Failed to remove 1 directory" in info_args[1]
         assert "Permission denied" in info_args[1]
 
-    def test_requires_open_project(self):
+    def test_requires_open_project(self, qapp):
         """Test that operation requires an open project."""
         # Mock components
         mock_controller = MagicMock()

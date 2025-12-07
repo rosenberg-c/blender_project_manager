@@ -48,10 +48,10 @@ class TestRenameObjectsPathHandling:
             import rename_objects
 
             # Call the function
-            result = rename_objects.update_linked_references(
-                lib_file=str(lib_file),
-                old_names=["OldObject"],
-                new_names=["NewObject"],
+            renamed_items = [{"old_name": "OldObject", "new_name": "NewObject"}]
+            result = rename_objects.remap_linked_references(
+                lib_path=str(lib_file),
+                renamed_items=renamed_items,
                 root_dir=str(project_root),
                 dry_run=True
             )

@@ -221,7 +221,7 @@ class UtilitiesTab(BaseOperationTab):
             return
 
         try:
-            # Find all empty directories
+            # Find and count empty directories
             project_root = self.get_project_root()
             empty_dirs = []
 
@@ -253,18 +253,29 @@ class UtilitiesTab(BaseOperationTab):
             if not confirmed:
                 return
 
-            # Delete directories with loading cursor
+            # Delete directories iteratively with loading cursor
+            # Keep removing until no more empty directories (handles nested empties)
             removed_count = 0
             failed = []
 
             def remove_directories():
                 nonlocal removed_count, failed
-                for empty_dir in empty_dirs:
-                    try:
-                        empty_dir.rmdir()
-                        removed_count += 1
-                    except Exception as e:
-                        failed.append(f"{empty_dir.name}: {str(e)}")
+                while True:
+                    found_empty = False
+                    for dirpath, dirnames, filenames in project_root.walk(top_down=False):
+                        if dirpath == project_root:
+                            continue
+                        try:
+                            if not any(dirpath.iterdir()):
+                                dirpath.rmdir()
+                                removed_count += 1
+                                found_empty = True
+                        except Exception as e:
+                            failed.append(f"{dirpath.name}: {str(e)}")
+
+                    # If no empty directories found this pass, we're done
+                    if not found_empty:
+                        break
 
             self.with_loading_cursor(remove_directories)
 

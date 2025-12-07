@@ -7,6 +7,12 @@ set -e
 echo "=== Blender Project Manager Test Suite ==="
 echo ""
 
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    echo "Activating virtual environment..."
+    source venv/bin/activate
+fi
+
 # Check if pytest is installed
 if ! command -v pytest &> /dev/null; then
     echo "Error: pytest not found. Install with:"
