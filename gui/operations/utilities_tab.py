@@ -79,6 +79,21 @@ class UtilitiesTab(BaseOperationTab):
         self.clean_blend1_btn.setToolTip("Remove all .blend1 and .blend2 backup files from the project")
         tab_layout.addWidget(self.clean_blend1_btn)
 
+        tab_layout.addSpacing(20)
+
+        # Remove empty directories section
+        empty_dirs_label = QLabel("<b>Empty Directories:</b>")
+        tab_layout.addWidget(empty_dirs_label)
+
+        empty_dirs_desc = QLabel("Remove empty directories from the project to keep it organized.")
+        empty_dirs_desc.setWordWrap(True)
+        tab_layout.addWidget(empty_dirs_desc)
+
+        self.remove_empty_dirs_btn = QPushButton("Remove Empty Directories")
+        self.remove_empty_dirs_btn.clicked.connect(self._remove_empty_directories)
+        self.remove_empty_dirs_btn.setToolTip("Remove all empty directories from the project")
+        tab_layout.addWidget(self.remove_empty_dirs_btn)
+
         # Add stretch to push everything to top
         tab_layout.addStretch()
 
@@ -198,6 +213,77 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_TO_CLEAN.format(error=str(e)))
+
+    def _remove_empty_directories(self):
+        """Remove all empty directories from the project."""
+        if not self.controller.project.is_open:
+            self.show_warning(TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
+            return
+
+        try:
+            # Find all empty directories
+            project_root = self.get_project_root()
+            empty_dirs = []
+
+            # Walk through all directories, depth-first (deepest first)
+            for dirpath, dirnames, filenames in project_root.walk(top_down=False):
+                # Skip if it's the project root itself
+                if dirpath == project_root:
+                    continue
+
+                # Check if directory is empty (no files and no subdirectories)
+                try:
+                    if not any(dirpath.iterdir()):
+                        empty_dirs.append(dirpath)
+                except (OSError, PermissionError):
+                    # Skip directories we can't read
+                    continue
+
+            if not empty_dirs:
+                self.show_info("No Empty Directories", "No empty directories found in the project.")
+                return
+
+            # Confirm with user
+            confirmed = self.confirm(
+                "Remove Empty Directories",
+                f"Found {len(empty_dirs)} empty director{'y' if len(empty_dirs) == 1 else 'ies'}.\n\n"
+                f"Remove {'it' if len(empty_dirs) == 1 else 'them'}?"
+            )
+
+            if not confirmed:
+                return
+
+            # Delete directories with loading cursor
+            removed_count = 0
+            failed = []
+
+            def remove_directories():
+                nonlocal removed_count, failed
+                for empty_dir in empty_dirs:
+                    try:
+                        empty_dir.rmdir()
+                        removed_count += 1
+                    except Exception as e:
+                        failed.append(f"{empty_dir.name}: {str(e)}")
+
+            self.with_loading_cursor(remove_directories)
+
+            # Show results
+            message_parts = []
+            if removed_count > 0:
+                message_parts.append(f"<b>Successfully removed {removed_count} empty director{'y' if removed_count == 1 else 'ies'}</b><br>")
+
+            if failed:
+                message_parts.append(f"<br><b>Failed to remove {len(failed)} director{'y' if len(failed) == 1 else 'ies'}:</b><br>")
+                for error in failed[:5]:
+                    message_parts.append(f"  • {error}<br>")
+                if len(failed) > 5:
+                    message_parts.append(f"  ... and {len(failed) - 5} more<br>")
+
+            self.show_info(TITLE_CLEANUP_COMPLETE, "".join(message_parts))
+
+        except Exception as e:
+            self.show_error(TITLE_ERROR, f"Failed to remove empty directories:\n\n{str(e)}")
 
     def _reload_libraries(self):
         """Reload all library links in .blend files in the project."""
