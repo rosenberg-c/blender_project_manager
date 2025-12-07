@@ -137,15 +137,15 @@ def process_blend_files(root_dir, old_path_abs, new_path_abs, dry_run=True):
 
     for blend_file in blend_files:
         try:
-            # Open the blend file
-            bpy.ops.wm.open_mainfile(filepath=blend_file)
+            # Open the blend file (convert Path to string for Blender compatibility)
+            bpy.ops.wm.open_mainfile(filepath=str(blend_file))
 
             # Update image references
             update_result = update_image_references_in_blend(old_path_abs, new_path_abs, dry_run)
 
             if update_result["updated_images"]:
                 result["updated_files"].append({
-                    "file": blend_file,
+                    "file": str(blend_file),
                     "updated_images": update_result["updated_images"]
                 })
 
