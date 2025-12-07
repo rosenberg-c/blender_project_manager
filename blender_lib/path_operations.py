@@ -6,8 +6,13 @@ Refactored from the original scripts with added dry-run support for previewing c
 import os
 from pathlib import Path
 from typing import List
+import sys
 
 import bpy
+
+# Add parent directory to path to import core utilities
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.path_utils import rebase_relative_path
 
 from .models import PathChange
 
@@ -21,8 +26,7 @@ class PathRebaser:
                             new_blend_dir: Path) -> str:
         """Convert Blender relative path when blend file moves.
 
-        When a .blend file moves to a new directory, its relative paths (//)
-        need to be updated to still point to the same absolute locations.
+        Delegates to core.path_utils.rebase_relative_path for the actual implementation.
 
         Args:
             original_path: Blender path starting with '//'
@@ -31,27 +35,8 @@ class PathRebaser:
 
         Returns:
             New relative path that points to same absolute location
-
-        Example:
-            >>> old_dir = Path("/project/scenes")
-            >>> new_dir = Path("/project/exported/scenes")
-            >>> PathRebaser.rebase_relative_path("//../../textures/wood.jpg", old_dir, new_dir)
-            "//../../../textures/wood.jpg"
         """
-        if not original_path.startswith("//"):
-            return original_path
-
-        # Strip leading '//' and normalize slashes
-        rel = original_path[2:].replace("\\", "/")
-
-        # Get absolute path as seen from old blend directory
-        abs_from_old = os.path.normpath(os.path.join(str(old_blend_dir), rel))
-
-        # Calculate new relative path from new blend directory
-        new_rel = os.path.relpath(abs_from_old, str(new_blend_dir))
-        new_rel = new_rel.replace("\\", "/")
-
-        return "//" + new_rel
+        return rebase_relative_path(original_path, old_blend_dir, new_blend_dir)
 
     def update_blend_paths(self,
                           blend_path: Path,

@@ -1,22 +1,18 @@
 """File scanning utilities for finding .blend and texture files."""
 
 import os
+import sys
 from pathlib import Path
 from typing import List, Set
 
+# Import constants from centralized location
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from blender_lib.constants import TEXTURE_EXTENSIONS, BLEND_EXTENSIONS, IGNORE_PATTERNS
 
-# Default directories to ignore when scanning
-DEFAULT_IGNORE_DIRS = {
-    ".git", ".svn", ".hg", "__pycache__",
-    ".idea", ".vscode", "node_modules",
-    ".blend1", ".blend2"
-}
-
-# Supported texture extensions
-TEXTURE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff'}
-
-# Blend file extensions
-BLEND_EXTENSIONS = {'.blend'}
+# Convert list constants to sets for faster lookup
+TEXTURE_EXTENSIONS = set(TEXTURE_EXTENSIONS)
+BLEND_EXTENSIONS = set(BLEND_EXTENSIONS)
+DEFAULT_IGNORE_DIRS = set(IGNORE_PATTERNS)
 
 
 def find_blend_files(

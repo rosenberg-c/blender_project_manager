@@ -10,21 +10,10 @@ import shutil
 sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
 
-
-def find_blend_files(root_path):
-    """Find all .blend files under root path, excluding ignored directories."""
-    ignore_dirs = {".git", ".svn", ".hg", "__pycache__", ".idea", ".vscode"}
-    blend_files = []
-
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        # Remove ignored directories in-place
-        dirnames[:] = [d for d in dirnames if d not in ignore_dirs and not d.startswith(".")]
-
-        for fname in filenames:
-            if fname.lower().endswith(".blend") and not fname.startswith("."):
-                blend_files.append(os.path.join(dirpath, fname))
-
-    return blend_files
+# Add parent directory to path to import core utilities
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.file_scanner import find_blend_files
 
 
 def rename_texture_on_disk(old_path, new_path, dry_run=True):
@@ -144,7 +133,7 @@ def process_blend_files(root_dir, old_path_abs, new_path_abs, dry_run=True):
     }
 
     # Find all .blend files
-    blend_files = find_blend_files(root_dir)
+    blend_files = find_blend_files(Path(root_dir))
 
     for blend_file in blend_files:
         try:

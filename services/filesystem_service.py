@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from typing import List, Set
 
+from core.file_scanner import find_blend_files as core_find_blend_files
+
 
 class FilesystemService:
     """Handles file system operations and scanning."""
@@ -24,24 +26,12 @@ class FilesystemService:
     def find_blend_files(self) -> List[Path]:
         """Find all .blend files in the project.
 
+        Delegates to core.file_scanner.find_blend_files.
+
         Returns:
             List of Path objects for .blend files
         """
-        blend_files = []
-
-        for dirpath, dirnames, filenames in os.walk(self.project_root):
-            # Prune ignored directories
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in self.ignore_patterns
-                and (not self.ignore_hidden or not d.startswith('.'))
-            ]
-
-            for filename in filenames:
-                if filename.endswith('.blend'):
-                    blend_files.append(Path(dirpath) / filename)
-
-        return blend_files
+        return core_find_blend_files(self.project_root, self.ignore_patterns)
 
     def find_files_by_extension(self, extensions: List[str]) -> List[Path]:
         """Find all files with given extensions.

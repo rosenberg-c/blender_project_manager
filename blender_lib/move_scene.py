@@ -10,32 +10,10 @@ import shutil
 sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
 
-
-def rebase_relative_path(original_path, old_scene_dir, new_scene_dir):
-    """Given a Blender-style relative path starting with '//',
-    compute a new relative path from new_scene_dir that still points
-    to the same absolute file.
-
-    Args:
-        original_path: Original relative path (e.g., '//textures/image.png')
-        old_scene_dir: Directory of the old .blend file
-        new_scene_dir: Directory where .blend will be moved to
-
-    Returns:
-        New relative path string (still starting with '//')
-    """
-    # Strip leading '//' and normalize
-    rel = original_path[2:]
-    rel = rel.replace("\\", "/")
-
-    # Absolute path as seen from the old scene dir
-    abs_from_old = os.path.normpath(os.path.join(old_scene_dir, rel))
-
-    # New relative path from new scene dir
-    new_rel = os.path.relpath(abs_from_old, new_scene_dir)
-    new_rel = new_rel.replace("\\", "/")
-
-    return "//" + new_rel
+# Add parent directory to path to import core utilities
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from core.path_utils import rebase_relative_path
 
 
 def move_scene_and_rebase(old_scene_path, new_scene_path, delete_old=False, dry_run=True):
