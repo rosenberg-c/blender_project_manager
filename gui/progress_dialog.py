@@ -3,7 +3,7 @@
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel,
-    QProgressBar, QTextEdit, QPushButton
+    QProgressBar, QTextEdit, QPushButton, QApplication
 )
 
 
@@ -63,10 +63,14 @@ class OperationProgressDialog(QDialog):
         self.status_label.setText(message)
         self.log_text.append(f"[{percentage}%] {message}")
 
+        # Force Qt to process events and repaint the dialog (real-time updates)
+        QApplication.processEvents()
+
         # Enable close button when complete
         if percentage >= 100:
             self.close_button.setEnabled(True)
             self.status_label.setText("✓ Complete!")
+            QApplication.processEvents()
 
     def mark_error(self, error_message: str):
         """Mark operation as failed.
@@ -78,3 +82,6 @@ class OperationProgressDialog(QDialog):
         self.status_label.setText(f"❌ Error: {error_message}")
         self.log_text.append(f"\n❌ ERROR: {error_message}")
         self.close_button.setEnabled(True)
+
+        # Force UI update
+        QApplication.processEvents()
