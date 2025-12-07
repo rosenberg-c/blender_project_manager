@@ -312,11 +312,11 @@ class OperationsPanelWidget(QWidget):
         mode_label = QLabel("<b>Link Mode:</b>")
         tab_layout.addWidget(mode_label)
 
-        self.link_mode_instance = QRadioButton("Link as collection instance (Blender default)")
-        self.link_mode_instance.setToolTip("Creates a collection instance (orange) inside the target collection")
+        self.link_mode_instance = QRadioButton("Link as instance (Blender default)")
+        self.link_mode_instance.setToolTip("Creates an instance inside the target collection.\nSupports ONE collection or ONE object (mesh, camera, etc.)")
         self.link_mode_instance.setChecked(True)
 
-        self.link_mode_individual = QRadioButton("Link individually into collection")
+        self.link_mode_individual = QRadioButton("Link individually into collection (Object/Mesh)")
         self.link_mode_individual.setToolTip("Links each object/collection separately into the target collection")
 
         self.link_mode_group = QButtonGroup()
@@ -1488,16 +1488,15 @@ class OperationsPanelWidget(QWidget):
 
         # Validate selection for instance mode
         if link_mode == 'instance':
-            # Count collections in selection
-            num_collections = sum(1 for t in item_types if t == 'collection')
-            num_objects = sum(1 for t in item_types if t == 'object')
+            # Count total items in selection
+            total_items = len(item_names)
 
-            if num_collections != 1 or num_objects > 0:
+            if total_items != 1:
                 QMessageBox.warning(
                     self,
                     "Invalid Selection",
-                    "Instance mode requires exactly ONE collection to be selected.\n\n"
-                    "Please select a single collection, or switch to 'Individual' mode."
+                    "Instance mode requires exactly ONE item to be selected.\n\n"
+                    "Please select a single collection or object, or switch to 'Individual' mode."
                 )
                 return
 
