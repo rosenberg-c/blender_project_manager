@@ -6,10 +6,11 @@ import platform
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QModelIndex
+from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit,
-    QTreeView, QFileSystemModel, QMessageBox, QPushButton
+    QWidget, QVBoxLayout, QLineEdit,
+    QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle
 )
 
 from controllers.project_controller import ProjectController
@@ -20,6 +21,46 @@ from gui.ui_strings import (
     TMPL_CONFIRM_DELETE_FILE, TMPL_CONFIRM_DELETE_DIR,
     TMPL_DELETE_SUCCESS, TMPL_DELETE_FAILED
 )
+
+
+class FileItemDelegate(QStyledItemDelegate):
+    """Custom delegate to draw trash icon on selected rows."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.trash_icon_size = 16
+        self.trash_icon_margin = 4
+
+    def paint(self, painter, option, index):
+        """Paint the item with trash icon if selected."""
+        # Draw the default item
+        super().paint(painter, option, index)
+
+        # Draw trash icon if this row is selected
+        if option.state & QStyle.StateFlag.State_Selected:
+            # Get trash icon
+            style = option.widget.style()
+            trash_icon = style.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
+
+            # Calculate icon position (right side of the row)
+            icon_rect = QRect(
+                option.rect.right() - self.trash_icon_size - self.trash_icon_margin,
+                option.rect.top() + (option.rect.height() - self.trash_icon_size) // 2,
+                self.trash_icon_size,
+                self.trash_icon_size
+            )
+
+            # Draw the icon
+            trash_icon.paint(painter, icon_rect)
+
+    def get_trash_icon_rect(self, option):
+        """Get the rectangle where the trash icon is drawn."""
+        return QRect(
+            option.rect.right() - self.trash_icon_size - self.trash_icon_margin,
+            option.rect.top() + (option.rect.height() - self.trash_icon_size) // 2,
+            self.trash_icon_size,
+            self.trash_icon_size
+        )
 
 
 class FileBrowserWidget(QWidget):
@@ -52,10 +93,6 @@ class FileBrowserWidget(QWidget):
         self.search_box.setPlaceholderText("Search files...")
         layout.addWidget(self.search_box)
 
-        # Horizontal layout for tree and delete button
-        tree_layout = QHBoxLayout()
-        tree_layout.setContentsMargins(0, 0, 0, 0)
-
         # Tree view with file system model
         self.tree = QTreeView()
         self.model = QFileSystemModel()
@@ -70,6 +107,10 @@ class FileBrowserWidget(QWidget):
         self.tree.setModel(self.model)
         self.tree.setSelectionMode(QTreeView.SingleSelection)
 
+        # Set custom delegate to draw trash icon on selected rows
+        self.delegate = FileItemDelegate(self.tree)
+        self.tree.setItemDelegate(self.delegate)
+
         # Hide size, type, and date columns for simpler view
         self.tree.hideColumn(1)
         self.tree.hideColumn(2)
@@ -80,23 +121,14 @@ class FileBrowserWidget(QWidget):
 
         # Connect selection signal
         self.tree.clicked.connect(self._on_item_clicked)
-        self.tree.selectionModel().selectionChanged.connect(self._on_selection_changed)
 
         # Connect double-click signal to open in Blender
         self.tree.doubleClicked.connect(self._on_item_double_clicked)
 
-        tree_layout.addWidget(self.tree)
+        # Install event filter to handle clicks on trash icon
+        self.tree.viewport().installEventFilter(self)
 
-        # Delete button with trash icon
-        self.delete_btn = QPushButton()
-        self.delete_btn.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_TrashIcon))
-        self.delete_btn.setToolTip("Delete selected file or directory")
-        self.delete_btn.setFixedWidth(40)
-        self.delete_btn.setEnabled(False)  # Disabled until something is selected
-        self.delete_btn.clicked.connect(self._delete_selected)
-        tree_layout.addWidget(self.delete_btn)
-
-        layout.addLayout(tree_layout)
+        layout.addWidget(self.tree)
 
         # State restoration data
         self.restore_data = None
@@ -172,10 +204,33 @@ class FileBrowserWidget(QWidget):
                 )
             )
 
-    def _on_selection_changed(self):
-        """Handle selection changes to enable/disable delete button."""
-        selected_path = self.get_selected_path()
-        self.delete_btn.setEnabled(selected_path is not None)
+    def eventFilter(self, obj, event):
+        """Filter events to handle clicks on trash icon."""
+        if obj == self.tree.viewport() and event.type() == event.Type.MouseButtonPress:
+            if event.button() == Qt.MouseButton.LeftButton:
+                # Get the index at the click position
+                pos = event.pos()
+                index = self.tree.indexAt(pos)
+
+                if index.isValid():
+                    # Check if this index is selected
+                    if self.tree.selectionModel().isSelected(index):
+                        # Get the visual rect for this index
+                        visual_rect = self.tree.visualRect(index)
+
+                        # Create option for delegate
+                        option = self.tree.viewOptions()
+                        option.rect = visual_rect
+
+                        # Get trash icon rect
+                        trash_rect = self.delegate.get_trash_icon_rect(option)
+
+                        # Check if click is within trash icon
+                        if trash_rect.contains(pos):
+                            self._delete_selected()
+                            return True  # Event handled
+
+        return super().eventFilter(obj, event)
 
     def _delete_selected(self):
         """Delete the currently selected file or directory."""
