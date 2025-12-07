@@ -248,3 +248,151 @@ class TestFindReferencesLogic:
         assert "LinkedCube" in ref_info["linked_objects"]
         assert "LinkedSphere" in ref_info["linked_objects"]
         assert "LinkedCollection" in ref_info["linked_collections"]
+
+
+class TestFindTexturereferences:
+    """Tests for finding references to texture files."""
+
+    def test_find_texture_references_identifies_usage(self, tmp_path):
+        """Test that files using a texture are identified."""
+        # Setup
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        target_texture = project_root / "textures" / "wood.png"
+        target_texture.parent.mkdir()
+        target_texture.write_bytes(b"FAKE_IMAGE")
+
+        scene_file = project_root / "scene.blend"
+        scene_file.write_bytes(b"FAKE_BLEND")
+
+        # Mock image that uses the texture
+        mock_image = MagicMock()
+        mock_image.name = "WoodTexture"
+        mock_image.filepath = str(target_texture)
+        mock_image.size = [2048, 2048]
+
+        mock_bpy = MagicMock()
+        mock_bpy.ops.wm.open_mainfile = MagicMock()
+        mock_bpy.data.images = [mock_image]
+        mock_bpy.path.abspath = lambda p: str(target_texture)
+
+        import sys
+        blender_lib_path = str(Path(__file__).parent.parent.parent / "blender_lib")
+        if blender_lib_path not in sys.path:
+            sys.path.insert(0, blender_lib_path)
+
+        with patch.dict('sys.modules', {'bpy': mock_bpy}):
+            import find_references
+
+            result = find_references.find_references_to_texture(
+                target_file=str(target_texture),
+                project_root=str(project_root)
+            )
+
+        # Verify: scene.blend should be in referencing_files
+        referencing_files = result.get("referencing_files", [])
+        assert len(referencing_files) == 1, "Should find 1 file using the texture"
+        assert "scene.blend" in referencing_files[0]["file_name"]
+        assert referencing_files[0]["images_count"] == 1
+
+    def test_is_texture_file_identifies_textures(self):
+        """Test that texture files are correctly identified."""
+        import sys
+        blender_lib_path = str(Path(__file__).parent.parent.parent / "blender_lib")
+        if blender_lib_path not in sys.path:
+            sys.path.insert(0, blender_lib_path)
+
+        # Mock bpy before importing
+        mock_bpy = MagicMock()
+        with patch.dict('sys.modules', {'bpy': mock_bpy}):
+            import find_references
+
+            # Should identify as textures
+            assert find_references.is_texture_file("texture.png") is True
+            assert find_references.is_texture_file("image.jpg") is True
+            assert find_references.is_texture_file("map.exr") is True
+            assert find_references.is_texture_file("hdri.hdr") is True
+            assert find_references.is_texture_file("normal.tiff") is True
+
+            # Should not identify as textures
+            assert find_references.is_texture_file("model.blend") is False
+            assert find_references.is_texture_file("script.py") is False
+            assert find_references.is_texture_file("data.json") is False
+
+    def test_find_references_routes_to_correct_function(self, tmp_path):
+        """Test that find_references_to_file routes to the correct function based on file type."""
+        import sys
+        blender_lib_path = str(Path(__file__).parent.parent.parent / "blender_lib")
+        if blender_lib_path not in sys.path:
+            sys.path.insert(0, blender_lib_path)
+
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        # Test texture file
+        texture_file = project_root / "texture.png"
+        texture_file.write_bytes(b"FAKE_IMAGE")
+
+        mock_bpy = MagicMock()
+        mock_bpy.ops.wm.open_mainfile = MagicMock()
+        mock_bpy.data.images = []
+
+        with patch.dict('sys.modules', {'bpy': mock_bpy}):
+            import find_references
+
+            result = find_references.find_references_to_file(
+                target_file=str(texture_file),
+                project_root=str(project_root)
+            )
+
+        # Verify: Should route to texture function
+        assert result.get("file_type") == "texture"
+
+    def test_texture_skip_generated_images(self, tmp_path):
+        """Test that generated/packed images without filepath are skipped."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        target_texture = project_root / "texture.png"
+        target_texture.write_bytes(b"FAKE_IMAGE")
+
+        scene_file = project_root / "scene.blend"
+        scene_file.write_bytes(b"FAKE_BLEND")
+
+        # Mock image without filepath (generated image)
+        mock_generated = MagicMock()
+        mock_generated.name = "GeneratedImage"
+        mock_generated.filepath = ""  # No filepath
+
+        # Mock image with filepath
+        mock_real = MagicMock()
+        mock_real.name = "RealTexture"
+        mock_real.filepath = str(target_texture)
+        mock_real.size = [1024, 1024]
+
+        mock_bpy = MagicMock()
+        mock_bpy.ops.wm.open_mainfile = MagicMock()
+        mock_bpy.data.images = [mock_generated, mock_real]
+        mock_bpy.path.abspath = lambda p: str(target_texture) if p else ""
+
+        import sys
+        blender_lib_path = str(Path(__file__).parent.parent.parent / "blender_lib")
+        if blender_lib_path not in sys.path:
+            sys.path.insert(0, blender_lib_path)
+
+        with patch.dict('sys.modules', {'bpy': mock_bpy}):
+            import find_references
+
+            result = find_references.find_references_to_texture(
+                target_file=str(target_texture),
+                project_root=str(project_root)
+            )
+
+        # Verify: Only the real texture should be counted, not generated
+        referencing_files = result.get("referencing_files", [])
+        assert len(referencing_files) == 1
+        assert referencing_files[0]["images_count"] == 1
+        images = referencing_files[0]["images"]
+        assert len(images) == 1
+        assert images[0]["name"] == "RealTexture"

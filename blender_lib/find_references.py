@@ -1,6 +1,10 @@
-"""Blender script to find all files that reference a specific .blend file.
+"""Blender script to find all files that reference a specific file.
 
-This is useful for understanding library dependencies in a project.
+Supports:
+- .blend files: Find which files link to them as libraries
+- Texture files: Find which .blend files use them as images
+
+This is useful for understanding file dependencies in a project.
 """
 
 import bpy
@@ -12,14 +16,27 @@ from pathlib import Path
 # Import shared utilities
 sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
+from constants import TEXTURE_EXTENSIONS
 
 # Add parent directory to path to import core utilities
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.file_scanner import find_blend_files
 
 
-def find_references_to_file(target_file: str, project_root: str):
-    """Find all .blend files that reference (link to) the target file.
+def is_texture_file(file_path: str) -> bool:
+    """Check if file is a texture file.
+
+    Args:
+        file_path: Path to file
+
+    Returns:
+        True if file is a texture
+    """
+    return Path(file_path).suffix.lower() in TEXTURE_EXTENSIONS
+
+
+def find_references_to_blend_file(target_file: str, project_root: str):
+    """Find all .blend files that link to the target .blend file as a library.
 
     Args:
         target_file: Path to the .blend file to find references to
@@ -93,6 +110,101 @@ def find_references_to_file(target_file: str, project_root: str):
         result["errors"].append(f"Failed to scan project: {str(e)}")
 
     return result
+
+
+def find_references_to_texture(target_file: str, project_root: str):
+    """Find all .blend files that use the target texture file.
+
+    Args:
+        target_file: Path to the texture file to find references to
+        project_root: Root directory of the project
+
+    Returns:
+        Dictionary with results
+    """
+    result = {
+        "target_file": target_file,
+        "target_name": Path(target_file).name,
+        "file_type": "texture",
+        "referencing_files": [],
+        "files_scanned": 0,
+        "errors": [],
+        "warnings": []
+    }
+
+    # Get the absolute path and name of the target file
+    target_path = Path(target_file).resolve()
+    target_name = target_path.name
+
+    try:
+        # Find all .blend files in the project
+        blend_files = find_blend_files(Path(project_root))
+
+        # Check each blend file for references to the texture
+        for blend_file in blend_files:
+            try:
+                result["files_scanned"] += 1
+
+                # Open the blend file
+                bpy.ops.wm.open_mainfile(filepath=str(blend_file))
+
+                # Check all images in this file
+                if not bpy.data.images:
+                    continue
+
+                using_images = []
+                for img in bpy.data.images:
+                    # Skip images without a filepath (generated/packed images)
+                    if not img.filepath:
+                        continue
+
+                    # Get the absolute path of the image
+                    img_path = Path(bpy.path.abspath(img.filepath)).resolve()
+
+                    # Check if this image is our target texture
+                    if img_path == target_path or img_path.name == target_name:
+                        using_images.append({
+                            "name": img.name,
+                            "filepath": img.filepath,
+                            "size": f"{img.size[0]}x{img.size[1]}" if img.size[0] > 0 else "unknown"
+                        })
+
+                if using_images:
+                    ref_info = {
+                        "file": str(blend_file),
+                        "file_name": blend_file.name,
+                        "images_count": len(using_images),
+                        "images": using_images[:10]  # First 10
+                    }
+                    result["referencing_files"].append(ref_info)
+
+            except Exception as e:
+                result["warnings"].append(f"Could not scan {blend_file.name}: {str(e)}")
+                continue
+
+    except Exception as e:
+        result["errors"].append(f"Failed to scan project: {str(e)}")
+
+    return result
+
+
+def find_references_to_file(target_file: str, project_root: str):
+    """Find all files that reference the target file.
+
+    Automatically detects file type and uses appropriate method.
+
+    Args:
+        target_file: Path to the file to find references to
+        project_root: Root directory of the project
+
+    Returns:
+        Dictionary with results
+    """
+    if is_texture_file(target_file):
+        return find_references_to_texture(target_file, project_root)
+    else:
+        # Assume it's a .blend file
+        return find_references_to_blend_file(target_file, project_root)
 
 
 if __name__ == "__main__":

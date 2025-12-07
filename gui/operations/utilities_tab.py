@@ -54,8 +54,8 @@ class UtilitiesTab(BaseOperationTab):
         """
         super().set_file(file_path)
 
-        # Enable find references button only for .blend files
-        if file_path and self.is_blend_file(file_path):
+        # Enable find references button for .blend files and texture files
+        if file_path and (self.is_blend_file(file_path) or self.is_texture_file(file_path)):
             self.find_references_btn.setEnabled(True)
         else:
             self.find_references_btn.setEnabled(False)
@@ -159,7 +159,8 @@ class UtilitiesTab(BaseOperationTab):
         tab_layout.addWidget(find_refs_label)
 
         find_refs_desc = QLabel(
-            "Find all .blend files in your project that reference (link to) the selected .blend file. "
+            "Find all .blend files that reference the selected file. "
+            "Works for .blend files (library links) and texture files (image usage). "
             "Useful for understanding file dependencies."
         )
         find_refs_desc.setWordWrap(True)
@@ -422,8 +423,12 @@ class UtilitiesTab(BaseOperationTab):
             self.show_warning(TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
             return
 
-        if not self.current_file or not self.is_blend_file(self.current_file):
-            self.show_warning("No .blend File", "Please select a .blend file first.")
+        if not self.current_file:
+            self.show_warning("No File Selected", "Please select a file first.")
+            return
+
+        if not (self.is_blend_file(self.current_file) or self.is_texture_file(self.current_file)):
+            self.show_warning("Unsupported File Type", "Please select a .blend file or texture file (.png, .jpg, .exr, etc.).")
             return
 
         try:
@@ -459,6 +464,7 @@ class UtilitiesTab(BaseOperationTab):
 
             # Show results
             target_name = data.get("target_name", self.current_file.name)
+            file_type = data.get("file_type", "blend")
             referencing_files = data.get("referencing_files", [])
             files_scanned = data.get("files_scanned", 0)
             errors = data.get("errors", [])
@@ -469,36 +475,56 @@ class UtilitiesTab(BaseOperationTab):
             if not referencing_files:
                 message_parts.append(f"<b>No references found to '{target_name}'</b><br>")
                 message_parts.append(f"<br>Scanned {files_scanned} .blend file(s) in the project.<br>")
-                message_parts.append(f"<br><i>This file is not linked by any other .blend files.</i><br>")
+                if file_type == "texture":
+                    message_parts.append(f"<br><i>This texture is not used by any .blend files.</i><br>")
+                else:
+                    message_parts.append(f"<br><i>This file is not linked by any other .blend files.</i><br>")
             else:
                 message_parts.append(f"<b>Found {len(referencing_files)} file(s) referencing '{target_name}':</b><br><br>")
 
                 for ref in referencing_files[:10]:  # Show first 10
                     file_name = ref.get("file_name", "Unknown")
-                    linked_objects = ref.get("linked_objects_count", 0)
-                    linked_collections = ref.get("linked_collections_count", 0)
-
                     message_parts.append(f"<b>• {file_name}</b><br>")
 
-                    if linked_objects > 0:
-                        message_parts.append(f"  Linked objects: {linked_objects}")
-                        obj_names = ref.get("linked_objects", [])
-                        if obj_names:
-                            message_parts.append(f" ({', '.join(obj_names[:3])}")
-                            if len(obj_names) > 3:
-                                message_parts.append(f", +{len(obj_names) - 3} more")
-                            message_parts.append(")")
-                        message_parts.append("<br>")
+                    # Handle texture references
+                    if file_type == "texture":
+                        images_count = ref.get("images_count", 0)
+                        images = ref.get("images", [])
 
-                    if linked_collections > 0:
-                        message_parts.append(f"  Linked collections: {linked_collections}")
-                        col_names = ref.get("linked_collections", [])
-                        if col_names:
-                            message_parts.append(f" ({', '.join(col_names[:3])}")
-                            if len(col_names) > 3:
-                                message_parts.append(f", +{len(col_names) - 3} more")
-                            message_parts.append(")")
-                        message_parts.append("<br>")
+                        if images_count > 0:
+                            message_parts.append(f"  Uses texture {images_count} time(s)")
+                            if images:
+                                img_names = [img.get("name", "Unknown") for img in images[:3]]
+                                message_parts.append(f" (as {', '.join(img_names)}")
+                                if len(images) > 3:
+                                    message_parts.append(f", +{len(images) - 3} more")
+                                message_parts.append(")")
+                            message_parts.append("<br>")
+
+                    # Handle blend file references
+                    else:
+                        linked_objects = ref.get("linked_objects_count", 0)
+                        linked_collections = ref.get("linked_collections_count", 0)
+
+                        if linked_objects > 0:
+                            message_parts.append(f"  Linked objects: {linked_objects}")
+                            obj_names = ref.get("linked_objects", [])
+                            if obj_names:
+                                message_parts.append(f" ({', '.join(obj_names[:3])}")
+                                if len(obj_names) > 3:
+                                    message_parts.append(f", +{len(obj_names) - 3} more")
+                                message_parts.append(")")
+                            message_parts.append("<br>")
+
+                        if linked_collections > 0:
+                            message_parts.append(f"  Linked collections: {linked_collections}")
+                            col_names = ref.get("linked_collections", [])
+                            if col_names:
+                                message_parts.append(f" ({', '.join(col_names[:3])}")
+                                if len(col_names) > 3:
+                                    message_parts.append(f", +{len(col_names) - 3} more")
+                                message_parts.append(")")
+                            message_parts.append("<br>")
 
                     message_parts.append("<br>")
 
