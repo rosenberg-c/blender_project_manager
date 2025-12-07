@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from controllers.project_controller import ProjectController
+from services.blender_service import BlenderService
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
     TITLE_CONFIRM_DELETION, TITLE_SUCCESS, TITLE_ERROR,
@@ -24,42 +25,75 @@ from gui.ui_strings import (
 
 
 class FileItemDelegate(QStyledItemDelegate):
-    """Custom delegate to draw trash icon on selected rows."""
+    """Custom delegate to draw action icons on selected rows."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.trash_icon_size = 16
-        self.trash_icon_margin = 4
+        self.icon_size = 16
+        self.icon_margin = 4
+        self.icon_spacing = 2
 
     def paint(self, painter, option, index):
-        """Paint the item with trash icon if selected."""
+        """Paint the item with action icons if selected."""
         # Draw the default item
         super().paint(painter, option, index)
 
-        # Draw trash icon if this row is selected
+        # Draw action icons if this row is selected
         if option.state & QStyle.StateFlag.State_Selected:
-            # Get trash icon
             style = option.widget.style()
+
+            # Get the file path from the model
+            model = index.model()
+            file_path = Path(model.filePath(index))
+
+            x_offset = option.rect.right() - self.icon_margin
+            y_pos = option.rect.top() + (option.rect.height() - self.icon_size) // 2
+
+            # Draw trash icon (always shown)
             trash_icon = style.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
-
-            # Calculate icon position (right side of the row)
-            icon_rect = QRect(
-                option.rect.right() - self.trash_icon_size - self.trash_icon_margin,
-                option.rect.top() + (option.rect.height() - self.trash_icon_size) // 2,
-                self.trash_icon_size,
-                self.trash_icon_size
+            trash_rect = QRect(
+                x_offset - self.icon_size,
+                y_pos,
+                self.icon_size,
+                self.icon_size
             )
+            trash_icon.paint(painter, trash_rect)
+            x_offset -= (self.icon_size + self.icon_spacing)
 
-            # Draw the icon
-            trash_icon.paint(painter, icon_rect)
+            # Draw find references icon (only for .blend and texture files)
+            if file_path.is_file() and self._is_supported_file(file_path):
+                find_icon = style.standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView)
+                find_rect = QRect(
+                    x_offset - self.icon_size,
+                    y_pos,
+                    self.icon_size,
+                    self.icon_size
+                )
+                find_icon.paint(painter, find_rect)
+
+    def _is_supported_file(self, file_path):
+        """Check if file is a .blend or texture file."""
+        suffix = file_path.suffix.lower()
+        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+        return suffix == '.blend' or suffix in texture_extensions
 
     def get_trash_icon_rect(self, option):
         """Get the rectangle where the trash icon is drawn."""
         return QRect(
-            option.rect.right() - self.trash_icon_size - self.trash_icon_margin,
-            option.rect.top() + (option.rect.height() - self.trash_icon_size) // 2,
-            self.trash_icon_size,
-            self.trash_icon_size
+            option.rect.right() - self.icon_size - self.icon_margin,
+            option.rect.top() + (option.rect.height() - self.icon_size) // 2,
+            self.icon_size,
+            self.icon_size
+        )
+
+    def get_find_icon_rect(self, option):
+        """Get the rectangle where the find references icon is drawn."""
+        x_offset = option.rect.right() - self.icon_margin - self.icon_size - self.icon_spacing
+        return QRect(
+            x_offset - self.icon_size,
+            option.rect.top() + (option.rect.height() - self.icon_size) // 2,
+            self.icon_size,
+            self.icon_size
         )
 
 
@@ -205,7 +239,7 @@ class FileBrowserWidget(QWidget):
             )
 
     def eventFilter(self, obj, event):
-        """Filter events to handle clicks on trash icon."""
+        """Filter events to handle clicks on action icons."""
         if obj == self.tree.viewport() and event.type() == event.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
                 # Get the index at the click position
@@ -222,12 +256,16 @@ class FileBrowserWidget(QWidget):
                         option = self.tree.viewOptions()
                         option.rect = visual_rect
 
-                        # Get trash icon rect
+                        # Check for trash icon click
                         trash_rect = self.delegate.get_trash_icon_rect(option)
-
-                        # Check if click is within trash icon
                         if trash_rect.contains(pos):
                             self._delete_selected()
+                            return True  # Event handled
+
+                        # Check for find references icon click
+                        find_rect = self.delegate.get_find_icon_rect(option)
+                        if find_rect.contains(pos):
+                            self._find_references()
                             return True  # Event handled
 
         return super().eventFilter(obj, event)
@@ -276,6 +314,98 @@ class FileBrowserWidget(QWidget):
                 self,
                 TITLE_ERROR,
                 TMPL_DELETE_FAILED.format(path=str(selected_path), error=str(e))
+            )
+
+    def _find_references(self):
+        """Find references to the selected file."""
+        selected_path = self.get_selected_path()
+        if not selected_path or not selected_path.is_file():
+            return
+
+        # Check if file type is supported
+        suffix = selected_path.suffix.lower()
+        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
+        is_blend = suffix == '.blend'
+        is_texture = suffix in texture_extensions
+
+        if not (is_blend or is_texture):
+            return
+
+        if not self.project.is_open:
+            QMessageBox.warning(self, "No Project", "Please open a project first.")
+            return
+
+        try:
+            # Run find references script
+            blender_service = BlenderService(self.project.blender_path)
+            result = blender_service.find_references(
+                target_file=str(selected_path),
+                project_root=str(self.project.project_root)
+            )
+
+            if not result.get("success"):
+                QMessageBox.critical(
+                    self,
+                    TITLE_ERROR,
+                    f"Failed to find references:\n\n{result.get('error', 'Unknown error')}"
+                )
+                return
+
+            # Format results
+            file_type = result.get("file_type", "blend")
+            referencing_files = result.get("referencing_files", [])
+            files_scanned = result.get("files_scanned", 0)
+
+            if not referencing_files:
+                message = f"No references found.\n\nScanned {files_scanned} .blend file(s)."
+                QMessageBox.information(self, "Find References", message)
+                return
+
+            # Build detailed message
+            message_lines = [
+                f"Found {len(referencing_files)} file(s) referencing {selected_path.name}:",
+                ""
+            ]
+
+            for ref_file in referencing_files:
+                file_name = ref_file.get("file_name", "Unknown")
+                message_lines.append(f"• {file_name}")
+
+                if file_type == "texture":
+                    # Texture references
+                    images_count = ref_file.get("images_count", 0)
+                    images = ref_file.get("images", [])
+                    if images:
+                        image_names = [img.get("name", "") for img in images[:3]]
+                        message_lines.append(f"  Uses texture {images_count} time(s) (as {', '.join(image_names)}{'...' if images_count > 3 else ''})")
+                else:
+                    # .blend file references
+                    linked_objects = ref_file.get("linked_objects", [])
+                    linked_collections = ref_file.get("linked_collections", [])
+
+                    if linked_objects:
+                        obj_preview = ', '.join(linked_objects[:3])
+                        if len(linked_objects) > 3:
+                            obj_preview += "..."
+                        message_lines.append(f"  Linked objects: {len(linked_objects)} ({obj_preview})")
+
+                    if linked_collections:
+                        col_preview = ', '.join(linked_collections[:3])
+                        if len(linked_collections) > 3:
+                            col_preview += "..."
+                        message_lines.append(f"  Linked collections: {len(linked_collections)} ({col_preview})")
+
+                message_lines.append("")
+
+            message_lines.append(f"Scanned {files_scanned} .blend file(s).")
+
+            QMessageBox.information(self, "Find References", "\n".join(message_lines))
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                TITLE_ERROR,
+                f"Failed to find references:\n\n{str(e)}"
             )
 
     def get_selected_path(self) -> Path | None:

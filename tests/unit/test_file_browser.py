@@ -39,6 +39,68 @@ class TestFileBrowserDelete:
         # This is a basic check that the viewport has event filters
         assert browser.tree.viewport() is not None
 
+    def test_find_references_icon_for_blend_file(self, qapp, tmp_path):
+        """Test that find references icon is shown for .blend files."""
+        # Create test .blend file
+        test_file = tmp_path / "test.blend"
+        test_file.write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = tmp_path
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+
+        # Test that delegate recognizes .blend file as supported
+        assert browser.delegate._is_supported_file(test_file)
+
+    def test_find_references_icon_for_texture_file(self, qapp, tmp_path):
+        """Test that find references icon is shown for texture files."""
+        # Test various texture formats
+        test_files = [
+            tmp_path / "texture.png",
+            tmp_path / "image.jpg",
+            tmp_path / "hdri.exr",
+        ]
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = tmp_path
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+
+        # Test that delegate recognizes texture files as supported
+        for test_file in test_files:
+            assert browser.delegate._is_supported_file(test_file)
+
+    def test_find_references_icon_not_for_other_files(self, qapp, tmp_path):
+        """Test that find references icon is NOT shown for non-supported files."""
+        # Test non-supported files
+        test_files = [
+            tmp_path / "script.py",
+            tmp_path / "data.json",
+            tmp_path / "readme.md",
+        ]
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = tmp_path
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+
+        # Test that delegate does NOT recognize these files as supported
+        for test_file in test_files:
+            assert not browser.delegate._is_supported_file(test_file)
+
     def test_delete_file_with_confirmation(self, qapp, tmp_path):
         """Test that deleting a file shows confirmation and deletes."""
         # Create test file
