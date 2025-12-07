@@ -15,6 +15,10 @@ from controllers.file_operations_controller import FileOperationsController
 from gui.file_browser import FileBrowserWidget
 from gui.operations_panel import OperationsPanelWidget
 from gui.theme import Theme
+from gui.ui_strings import (
+    TITLE_PROJECT_OPENED, TITLE_ERROR,
+    TMPL_PROJECT_INFO
+)
 
 
 class MainWindow(QMainWindow):
@@ -198,15 +202,17 @@ class MainWindow(QMainWindow):
             info = self.project_controller.get_project_info()
             QMessageBox.information(
                 self,
-                "Project Opened",
-                f"Project: {project_root.name}\n"
-                f"Root: {project_root}\n"
-                f".blend files found: {info.get('blend_files_count', 0)}"
+                TITLE_PROJECT_OPENED,
+                TMPL_PROJECT_INFO.format(
+                    project_name=project_root.name,
+                    project_root=project_root,
+                    blend_count=info.get('blend_files_count', 0)
+                )
             )
         else:
             QMessageBox.critical(
                 self,
-                "Error",
+                TITLE_ERROR,
                 f"Failed to open project at:\n{project_root}\n\n"
                 "Please check that Blender is installed at the expected location."
             )

@@ -16,6 +16,25 @@ from controllers.file_operations_controller import FileOperationsController
 from gui.preview_dialog import OperationPreviewDialog
 from gui.progress_dialog import OperationProgressDialog
 from gui.theme import Theme
+from gui.ui_strings import (
+    TITLE_NO_FILE, TITLE_NO_SELECTION, TITLE_MISSING_INPUT, TITLE_NO_ITEMS,
+    TITLE_NO_CHANGE, TITLE_CONFIRM_OPERATION, TITLE_CONFIRM_RENAME, TITLE_CONFIRM_LINK,
+    TITLE_ERROR, TITLE_SUCCESS, TITLE_NO_SOURCE_FILE, TITLE_FILE_NOT_FOUND,
+    TITLE_NO_SCENE, TITLE_NO_SOURCE, TITLE_NO_COLLECTION, TITLE_LOAD_ERROR,
+    TITLE_LINK_ERRORS, TITLE_LINK_FAILED, TITLE_LINK_COMPLETE, TITLE_NO_PROJECT,
+    TITLE_NO_BACKUP_FILES, TITLE_CLEANUP_COMPLETE, TITLE_CONFIRM_DELETION,
+    MSG_SELECT_BLEND_FILE, MSG_SELECT_FILE, MSG_SELECT_ITEMS_TO_RENAME,
+    MSG_ENTER_FIND_TEXT, MSG_NO_VALID_ITEMS, MSG_SOURCE_TARGET_SAME,
+    MSG_SELECT_SOURCE_BLEND, MSG_SELECT_TARGET_SCENE, MSG_SELECT_VALID_SOURCE,
+    MSG_SELECT_ITEMS_TO_LINK, MSG_ENTER_COLLECTION_NAME, MSG_OPEN_PROJECT_FIRST,
+    MSG_NO_BACKUP_FILES_FOUND,
+    BTN_EXECUTE_MOVE, BTN_PROCESSING, BTN_EXECUTING, BTN_LOADING, BTN_LOAD_OBJECTS_COLLECTIONS,
+    LABEL_NO_FILE_SELECTED, LABEL_NO_BLEND_SELECTED, LABEL_SELECT_BLEND_IN_BROWSER,
+    TMPL_SOURCE_FILE_NOT_FOUND, TMPL_FAILED_TO_LOAD, TMPL_OPERATION_FAILED,
+    TMPL_CONFIRM_MOVE, TMPL_CONFIRM_RENAME_OBJECTS, TMPL_CONFIRM_LINK,
+    TMPL_CONFIRM_DELETE_BACKUPS, TMPL_SUCCESS_WITH_CHANGES, TMPL_LINK_COMPLETE,
+    TMPL_FAILED_TO_CLEAN
+)
 
 
 class OperationsPanelWidget(QWidget):
@@ -253,7 +272,7 @@ class OperationsPanelWidget(QWidget):
         target_file_label = QLabel("Target file:")
         tab_layout.addWidget(target_file_label)
 
-        self.link_target_display = QLabel("<i>No .blend file selected</i>")
+        self.link_target_display = QLabel(LABEL_NO_BLEND_SELECTED)
         self.link_target_display.setWordWrap(True)
         self.link_target_display.setStyleSheet(Theme.get_file_display_style())
         tab_layout.addWidget(self.link_target_display)
@@ -285,7 +304,7 @@ class OperationsPanelWidget(QWidget):
         source_file_label = QLabel("From file:")
         tab_layout.addWidget(source_file_label)
 
-        self.link_source_display = QLabel("<i>Select a .blend file in the file browser</i>")
+        self.link_source_display = QLabel(LABEL_SELECT_BLEND_IN_BROWSER)
         self.link_source_display.setWordWrap(True)
         self.link_source_display.setStyleSheet(Theme.get_file_display_style())
         tab_layout.addWidget(self.link_source_display)
@@ -460,7 +479,7 @@ class OperationsPanelWidget(QWidget):
             else:
                 # Non-.blend file selected, clear source
                 self.link_source_file = None
-                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
+                self.link_source_display.setText(LABEL_SELECT_BLEND_IN_BROWSER)
                 self.link_load_btn.setEnabled(False)
                 self.link_items_list.clear()
                 self.link_source_data = {"objects": [], "collections": []}
@@ -471,16 +490,16 @@ class OperationsPanelWidget(QWidget):
                 self._load_scenes_for_target()
                 # Clear source since target changed
                 self.link_source_file = None
-                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
+                self.link_source_display.setText(LABEL_SELECT_BLEND_IN_BROWSER)
                 self.link_load_btn.setEnabled(False)
                 self.link_items_list.clear()
                 self.link_source_data = {"objects": [], "collections": []}
             else:
-                self.link_target_display.setText("<i>No .blend file selected</i>")
+                self.link_target_display.setText(LABEL_NO_BLEND_SELECTED)
                 self.link_scene_combo.clear()
                 self.link_scene_combo.setEnabled(False)
                 self.link_source_file = None
-                self.link_source_display.setText("<i>Select a .blend file in the file browser</i>")
+                self.link_source_display.setText(LABEL_SELECT_BLEND_IN_BROWSER)
                 self.link_load_btn.setEnabled(False)
                 self.link_preview_btn.setEnabled(False)
                 self.link_execute_btn.setEnabled(False)
@@ -644,9 +663,8 @@ class OperationsPanelWidget(QWidget):
         # Confirm with user
         reply = QMessageBox.question(
             self,
-            "Confirm Rename",
-            "This will rename the selected objects/collections in the .blend file.\n\n"
-            "Are you sure you want to continue?",
+            TITLE_CONFIRM_RENAME,
+            TMPL_CONFIRM_RENAME_OBJECTS,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -663,13 +681,13 @@ class OperationsPanelWidget(QWidget):
             dry_run: If True, only preview changes
         """
         if not self.current_file or self.current_file.suffix != '.blend':
-            QMessageBox.warning(self, "No File", "Please select a .blend file first.")
+            QMessageBox.warning(self, TITLE_NO_FILE, MSG_SELECT_BLEND_FILE)
             return
 
         # Get selected items
         selected_items = self.obj_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "No Selection", "Please select items to rename.")
+            QMessageBox.warning(self, TITLE_NO_SELECTION, MSG_SELECT_ITEMS_TO_RENAME)
             return
 
         # Get find/replace text
@@ -677,7 +695,7 @@ class OperationsPanelWidget(QWidget):
         replace_text = self.obj_replace_input.text().strip()
 
         if not find_text:
-            QMessageBox.warning(self, "Missing Input", "Please enter text to find.")
+            QMessageBox.warning(self, TITLE_MISSING_INPUT, MSG_ENTER_FIND_TEXT)
             return
 
         # Extract item names
@@ -688,13 +706,13 @@ class OperationsPanelWidget(QWidget):
                 item_names.append(item_data["data"].get("name", ""))
 
         if not item_names:
-            QMessageBox.warning(self, "No Items", "No valid items selected.")
+            QMessageBox.warning(self, TITLE_NO_ITEMS, MSG_NO_VALID_ITEMS)
             return
 
         # Show loading state
         btn = self.obj_preview_btn if dry_run else self.obj_execute_btn
         original_text = btn.text()
-        btn.setText("Processing..." if dry_run else "Executing...")
+        btn.setText(BTN_PROCESSING if dry_run else BTN_EXECUTING)
         btn.setEnabled(False)
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         QApplication.processEvents()
@@ -843,13 +861,13 @@ class OperationsPanelWidget(QWidget):
     def _preview_operation(self):
         """Show preview dialog for the operation."""
         if not self.current_file:
-            QMessageBox.warning(self, "No File", "Please select a file first.")
+            QMessageBox.warning(self, TITLE_NO_FILE, MSG_SELECT_FILE)
             return
 
         new_path = Path(self.new_path_input.text())
 
         if new_path == self.current_file:
-            QMessageBox.information(self, "No Change", "Source and target are the same.")
+            QMessageBox.information(self, TITLE_NO_CHANGE, MSG_SOURCE_TARGET_SAME)
             return
 
         # Check file/directory type
@@ -982,13 +1000,13 @@ class OperationsPanelWidget(QWidget):
     def _execute_operation(self):
         """Execute the move operation."""
         if not self.current_file:
-            QMessageBox.warning(self, "No File", "Please select a file first.")
+            QMessageBox.warning(self, TITLE_NO_FILE, MSG_SELECT_FILE)
             return
 
         new_path = Path(self.new_path_input.text())
 
         if new_path == self.current_file:
-            QMessageBox.information(self, "No Change", "Source and target are the same.")
+            QMessageBox.information(self, TITLE_NO_CHANGE, MSG_SOURCE_TARGET_SAME)
             return
 
         # Check file/directory type
@@ -1000,9 +1018,12 @@ class OperationsPanelWidget(QWidget):
         item_type = "directory" if is_directory else "file"
         reply = QMessageBox.question(
             self,
-            "Confirm Operation",
-            f"Move/rename {item_type}?\n\nFrom: {self.current_file}\nTo: {new_path}\n\n"
-            "All .blend files referencing this will be updated.",
+            TITLE_CONFIRM_OPERATION,
+            TMPL_CONFIRM_MOVE.format(
+                item_type=item_type,
+                old_path=self.current_file,
+                new_path=new_path
+            ),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -1011,7 +1032,7 @@ class OperationsPanelWidget(QWidget):
             return
 
         # Show loading state immediately
-        self.execute_btn.setText("Executing...")
+        self.execute_btn.setText(BTN_EXECUTING)
         self.execute_btn.setEnabled(False)
         self.preview_btn.setEnabled(False)
         self.browse_btn.setEnabled(False)
@@ -1042,17 +1063,20 @@ class OperationsPanelWidget(QWidget):
 
                     QMessageBox.information(
                         self,
-                        "Success",
-                        f"{result.message}\n\n{result.changes_made} changes made."
+                        TITLE_SUCCESS,
+                        TMPL_SUCCESS_WITH_CHANGES.format(
+                            message=result.message,
+                            changes=result.changes_made
+                        )
                     )
 
                     # Clear selection
                     self.current_file = None
-                    self.file_display.setText("<i>No file selected</i>")
+                    self.file_display.setText(LABEL_NO_FILE_SELECTED)
                     self.new_path_input.clear()
                     self.browse_btn.setEnabled(False)
                     self.preview_btn.setEnabled(False)
-                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)
                     self.execute_btn.setEnabled(False)
                 else:
                     progress_dialog.mark_error(result.message)
@@ -1060,12 +1084,12 @@ class OperationsPanelWidget(QWidget):
 
                     QMessageBox.critical(
                         self,
-                        "Error",
-                        f"Operation failed:\n\n{result.message}"
+                        TITLE_ERROR,
+                        TMPL_OPERATION_FAILED.format(message=result.message)
                     )
 
                     # Restore button state on error
-                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)
                     self.execute_btn.setEnabled(True)
                     self.preview_btn.setEnabled(True)
                     self.browse_btn.setEnabled(True)
@@ -1096,17 +1120,20 @@ class OperationsPanelWidget(QWidget):
 
                     QMessageBox.information(
                         self,
-                        "Success",
-                        f"{result.message}\n\n{result.changes_made} changes made."
+                        TITLE_SUCCESS,
+                        TMPL_SUCCESS_WITH_CHANGES.format(
+                            message=result.message,
+                            changes=result.changes_made
+                        )
                     )
 
                     # Clear selection
                     self.current_file = None
-                    self.file_display.setText("<i>No file selected</i>")
+                    self.file_display.setText(LABEL_NO_FILE_SELECTED)
                     self.new_path_input.clear()
                     self.browse_btn.setEnabled(False)
                     self.preview_btn.setEnabled(False)
-                    self.execute_btn.setText("Execute Move")  # Restore text
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)  # Restore text
                     self.execute_btn.setEnabled(False)
                 else:
                     progress_dialog.mark_error(result.message)
@@ -1114,12 +1141,12 @@ class OperationsPanelWidget(QWidget):
 
                     QMessageBox.critical(
                         self,
-                        "Error",
-                        f"Operation failed:\n\n{result.message}"
+                        TITLE_ERROR,
+                        TMPL_OPERATION_FAILED.format(message=result.message)
                     )
 
                     # Restore button state on error
-                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)
                     self.execute_btn.setEnabled(True)
                     self.preview_btn.setEnabled(True)
                     self.browse_btn.setEnabled(True)
@@ -1197,15 +1224,15 @@ class OperationsPanelWidget(QWidget):
                 # Clear inputs after successful execution
                 if file_moved:
                     self.current_file = None
-                    self.file_display.setText("<i>No file selected</i>")
+                    self.file_display.setText(LABEL_NO_FILE_SELECTED)
                     self.new_path_input.clear()
                     self.browse_btn.setEnabled(False)
                     self.preview_btn.setEnabled(False)
-                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)
                     self.execute_btn.setEnabled(False)
                 else:
                     # Restore button state
-                    self.execute_btn.setText("Execute Move")
+                    self.execute_btn.setText(BTN_EXECUTE_MOVE)
                     self.execute_btn.setEnabled(True)
                     self.preview_btn.setEnabled(True)
                     self.browse_btn.setEnabled(True)
@@ -1213,7 +1240,7 @@ class OperationsPanelWidget(QWidget):
             else:
                 # Unsupported file type
                 QApplication.restoreOverrideCursor()
-                self.execute_btn.setText("Execute Move")
+                self.execute_btn.setText(BTN_EXECUTE_MOVE)
                 self.execute_btn.setEnabled(True)
                 self.preview_btn.setEnabled(True)
                 self.browse_btn.setEnabled(True)
@@ -1228,7 +1255,7 @@ class OperationsPanelWidget(QWidget):
         except Exception as e:
             # Restore state on exception
             QApplication.restoreOverrideCursor()
-            self.execute_btn.setText("Execute Move")
+            self.execute_btn.setText(BTN_EXECUTE_MOVE)
             self.execute_btn.setEnabled(True)
             self.preview_btn.setEnabled(True)
             self.browse_btn.setEnabled(True)
@@ -1336,15 +1363,15 @@ class OperationsPanelWidget(QWidget):
     def _load_link_source(self):
         """Load objects and collections from the source .blend file."""
         if not self.link_source_file:
-            QMessageBox.warning(self, "No Source File", "Please select a source .blend file in the file browser.")
+            QMessageBox.warning(self, TITLE_NO_SOURCE_FILE, MSG_SELECT_SOURCE_BLEND)
             return
 
         if not self.link_source_file.exists():
-            QMessageBox.warning(self, "File Not Found", f"Source file not found: {self.link_source_file}")
+            QMessageBox.warning(self, TITLE_FILE_NOT_FOUND, TMPL_SOURCE_FILE_NOT_FOUND.format(file_path=self.link_source_file))
             return
 
         # Show loading state
-        self.link_load_btn.setText("Loading...")
+        self.link_load_btn.setText(BTN_LOADING)
         self.link_load_btn.setEnabled(False)
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         QApplication.processEvents()
@@ -1394,13 +1421,13 @@ class OperationsPanelWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Load Error",
-                f"Failed to load objects/collections:\n\n{str(e)}"
+                TITLE_LOAD_ERROR,
+                TMPL_FAILED_TO_LOAD.format(error=str(e))
             )
         finally:
             # Restore state
             QApplication.restoreOverrideCursor()
-            self.link_load_btn.setText("Load Objects/Collections")
+            self.link_load_btn.setText(BTN_LOAD_OBJECTS_COLLECTIONS)
             self.link_load_btn.setEnabled(True)
 
     def _preview_link(self):
@@ -1412,9 +1439,8 @@ class OperationsPanelWidget(QWidget):
         # Confirm with user
         reply = QMessageBox.question(
             self,
-            "Confirm Link",
-            "This will link the selected objects/collections into the target .blend file.\n\n"
-            "Are you sure you want to continue?",
+            TITLE_CONFIRM_LINK,
+            TMPL_CONFIRM_LINK,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -1434,24 +1460,24 @@ class OperationsPanelWidget(QWidget):
         target_file = self.link_locked_file if self.link_scene_lock.isChecked() else self.current_file
 
         if not target_file or target_file.suffix != '.blend':
-            QMessageBox.warning(self, "No File", "Please select a .blend file as target.")
+            QMessageBox.warning(self, TITLE_NO_FILE, MSG_SELECT_BLEND_FILE)
             return
 
         # Get selected scene
         target_scene = self.link_scene_combo.currentText()
         if not target_scene:
-            QMessageBox.warning(self, "No Scene", "Please select a target scene.")
+            QMessageBox.warning(self, TITLE_NO_SCENE, MSG_SELECT_TARGET_SCENE)
             return
 
         # Get source file
         if not self.link_source_file or not self.link_source_file.exists():
-            QMessageBox.warning(self, "No Source", "Please select a valid source .blend file in the file browser.")
+            QMessageBox.warning(self, TITLE_NO_SOURCE, MSG_SELECT_VALID_SOURCE)
             return
 
         # Get selected items
         selected_items = self.link_items_list.selectedItems()
         if not selected_items:
-            QMessageBox.warning(self, "No Selection", "Please select items to link.")
+            QMessageBox.warning(self, TITLE_NO_SELECTION, MSG_SELECT_ITEMS_TO_LINK)
             return
 
         # Get link mode
@@ -1460,7 +1486,7 @@ class OperationsPanelWidget(QWidget):
         # Get target collection name (required for both modes)
         target_collection = self.link_collection_input.text().strip()
         if not target_collection:
-            QMessageBox.warning(self, "No Collection", "Please enter a target collection name.")
+            QMessageBox.warning(self, TITLE_NO_COLLECTION, MSG_ENTER_COLLECTION_NAME)
             return
 
         # Extract item names and types
@@ -1473,7 +1499,7 @@ class OperationsPanelWidget(QWidget):
                 item_types.append(item_data["type"])  # 'object' or 'collection'
 
         if not item_names:
-            QMessageBox.warning(self, "No Items", "No valid items selected.")
+            QMessageBox.warning(self, TITLE_NO_ITEMS, MSG_NO_VALID_ITEMS)
             return
 
         # Check if target collection name conflicts with any selected item names
@@ -1503,7 +1529,7 @@ class OperationsPanelWidget(QWidget):
         # Show loading state
         btn = self.link_preview_btn if dry_run else self.link_execute_btn
         original_text = btn.text()
-        btn.setText("Processing..." if dry_run else "Executing...")
+        btn.setText(BTN_PROCESSING if dry_run else BTN_EXECUTING)
         btn.setEnabled(False)
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         QApplication.processEvents()
@@ -1533,7 +1559,7 @@ class OperationsPanelWidget(QWidget):
                     for error in preview.errors:
                         error_msg += f"  • {error}<br>"
 
-                    QMessageBox.critical(self, "Link Errors", error_msg)
+                    QMessageBox.critical(self, TITLE_LINK_ERRORS, error_msg)
                 else:
                     # Show preview dialog
                     dialog = OperationPreviewDialog(preview, self)
@@ -1548,8 +1574,11 @@ class OperationsPanelWidget(QWidget):
                 if result.success:
                     QMessageBox.information(
                         self,
-                        "Link Complete",
-                        f"{result.message}\n\n{result.changes_made} item(s) linked."
+                        TITLE_LINK_COMPLETE,
+                        TMPL_LINK_COMPLETE.format(
+                            message=result.message,
+                            changes=result.changes_made
+                        )
                     )
 
                     # Clear selection
@@ -1561,7 +1590,7 @@ class OperationsPanelWidget(QWidget):
                         for error in result.errors:
                             error_msg += f"  • {error}<br>"
 
-                    QMessageBox.critical(self, "Link Failed", error_msg)
+                    QMessageBox.critical(self, TITLE_LINK_FAILED, error_msg)
 
         except Exception as e:
             import traceback
@@ -1774,8 +1803,8 @@ class OperationsPanelWidget(QWidget):
         if not self.controller.project.is_open:
             QMessageBox.warning(
                 self,
-                "No Project",
-                "Please open a project first."
+                TITLE_NO_PROJECT,
+                MSG_OPEN_PROJECT_FIRST
             )
             return
 
@@ -1789,8 +1818,8 @@ class OperationsPanelWidget(QWidget):
             if not backup_files:
                 QMessageBox.information(
                     self,
-                    "No Backup Files",
-                    "No .blend1 or .blend2 backup files found in the project."
+                    TITLE_NO_BACKUP_FILES,
+                    MSG_NO_BACKUP_FILES_FOUND
                 )
                 return
 
@@ -1801,13 +1830,13 @@ class OperationsPanelWidget(QWidget):
             # Confirm with user
             reply = QMessageBox.question(
                 self,
-                "Confirm Deletion",
-                f"Found {len(backup_files)} backup file(s):\n"
-                f"  • {len(blend1_files)} .blend1 file(s)\n"
-                f"  • {len(blend2_files)} .blend2 file(s)\n\n"
-                f"Total size: {size_mb:.2f} MB\n\n"
-                f"Are you sure you want to delete these files?\n\n"
-                f"This action cannot be undone.",
+                TITLE_CONFIRM_DELETION,
+                TMPL_CONFIRM_DELETE_BACKUPS.format(
+                    count=len(backup_files),
+                    blend1_count=len(blend1_files),
+                    blend2_count=len(blend2_files),
+                    size_mb=size_mb
+                ),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
@@ -1847,7 +1876,7 @@ class OperationsPanelWidget(QWidget):
 
             QMessageBox.information(
                 self,
-                "Cleanup Complete",
+                TITLE_CLEANUP_COMPLETE,
                 "".join(message_parts)
             )
 
@@ -1855,6 +1884,6 @@ class OperationsPanelWidget(QWidget):
             QApplication.restoreOverrideCursor()
             QMessageBox.critical(
                 self,
-                "Error",
-                f"Failed to clean backup files:\n\n{str(e)}"
+                TITLE_ERROR,
+                TMPL_FAILED_TO_CLEAN.format(error=str(e))
             )

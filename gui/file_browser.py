@@ -12,6 +12,10 @@ from PySide6.QtWidgets import (
 )
 
 from controllers.project_controller import ProjectController
+from gui.ui_strings import (
+    TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
+    MSG_BLENDER_NOT_CONFIGURED, TMPL_FAILED_TO_OPEN_BLENDER
+)
 
 
 class FileBrowserWidget(QWidget):
@@ -124,9 +128,8 @@ class FileBrowserWidget(QWidget):
                 else:
                     QMessageBox.warning(
                         self,
-                        "Blender Not Found",
-                        "Cannot open file: Blender path not configured.\n\n"
-                        "Please ensure a project is open with a valid Blender installation."
+                        TITLE_BLENDER_NOT_FOUND,
+                        MSG_BLENDER_NOT_CONFIGURED
                     )
             else:  # Linux and others
                 # Use blender executable from project controller
@@ -135,16 +138,18 @@ class FileBrowserWidget(QWidget):
                 else:
                     QMessageBox.warning(
                         self,
-                        "Blender Not Found",
-                        "Cannot open file: Blender path not configured.\n\n"
-                        "Please ensure a project is open with a valid Blender installation."
+                        TITLE_BLENDER_NOT_FOUND,
+                        MSG_BLENDER_NOT_CONFIGURED
                     )
 
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error Opening File",
-                f"Failed to open {file_path.name} in Blender:\n\n{str(e)}"
+                TITLE_ERROR_OPENING_FILE,
+                TMPL_FAILED_TO_OPEN_BLENDER.format(
+                    file_name=file_path.name,
+                    error=str(e)
+                )
             )
 
     def get_selected_path(self) -> Path | None:
