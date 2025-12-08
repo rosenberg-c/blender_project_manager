@@ -1,12 +1,13 @@
 """Dialog for displaying broken links results."""
 
+import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QTableWidget, QTableWidgetItem, QPushButton,
-    QHeaderView, QAbstractItemView
+    QHeaderView, QAbstractItemView, QMessageBox
 )
 from PySide6.QtGui import QColor
 
@@ -14,15 +15,21 @@ from PySide6.QtGui import QColor
 class BrokenLinksDialog(QDialog):
     """Dialog showing broken links found in .blend files."""
 
-    def __init__(self, results: dict, parent=None):
+    remove_requested = Signal(list)
+    find_requested = Signal(list)
+
+    def __init__(self, results: dict, controller=None, parent=None):
         """Initialize broken links dialog.
 
         Args:
             results: Dictionary with broken links results from Blender script
+            controller: File operations controller (for running fix operations)
             parent: Parent widget
         """
         super().__init__(parent)
         self.results = results
+        self.controller = controller
+        self.rows_data = []
 
         self.setWindowTitle("Broken Links Results")
         self.resize(1000, 600)
@@ -104,10 +111,11 @@ class BrokenLinksDialog(QDialog):
 
             self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
             self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
 
-            rows_data = []
             for file_info in files_with_broken_links:
                 file_name = file_info.get("file_name", "Unknown")
+                file_path = file_info.get("file", "")
                 broken_libraries = file_info.get("broken_libraries", [])
                 broken_textures = file_info.get("broken_textures", [])
 
@@ -125,8 +133,9 @@ class BrokenLinksDialog(QDialog):
                         details_parts.append(f"{collections_count} collection(s)")
                     details = ", ".join(details_parts) if details_parts else "No items"
 
-                    rows_data.append({
-                        "file": file_name,
+                    self.rows_data.append({
+                        "file": file_path,
+                        "file_name": file_name,
                         "type": "Library",
                         "name": lib_name,
                         "path": resolved_path or lib_path,
@@ -142,8 +151,9 @@ class BrokenLinksDialog(QDialog):
 
                     details = f"{users_count} user(s)" if users_count > 0 else "No users"
 
-                    rows_data.append({
-                        "file": file_name,
+                    self.rows_data.append({
+                        "file": file_path,
+                        "file_name": file_name,
                         "type": "Texture",
                         "name": tex_name,
                         "path": resolved_path or tex_path,
@@ -151,10 +161,10 @@ class BrokenLinksDialog(QDialog):
                         "status": "error"
                     })
 
-            self.table.setRowCount(len(rows_data))
+            self.table.setRowCount(len(self.rows_data))
 
-            for i, row_data in enumerate(rows_data):
-                file_item = QTableWidgetItem(row_data["file"])
+            for i, row_data in enumerate(self.rows_data):
+                file_item = QTableWidgetItem(row_data["file_name"])
                 self.table.setItem(i, 0, file_item)
 
                 type_item = QTableWidgetItem(row_data["type"])
@@ -183,6 +193,26 @@ class BrokenLinksDialog(QDialog):
             layout.addWidget(self.table)
 
         btn_layout = QHBoxLayout()
+
+        if total_broken_links > 0 and self.controller:
+            self.find_files_btn = QPushButton("Try to Find Files")
+            self.find_files_btn.setToolTip("Search the project directory for the missing files and relink them")
+            self.find_files_btn.clicked.connect(self._find_files)
+            btn_layout.addWidget(self.find_files_btn)
+
+            btn_layout.addSpacing(10)
+
+            self.remove_selected_btn = QPushButton("Remove Selected")
+            self.remove_selected_btn.setToolTip("Remove selected broken links from the .blend files")
+            self.remove_selected_btn.clicked.connect(self._remove_selected)
+            btn_layout.addWidget(self.remove_selected_btn)
+
+            self.remove_all_btn = QPushButton("Remove All")
+            self.remove_all_btn.setToolTip("Remove all broken links from all affected .blend files")
+            self.remove_all_btn.setProperty("class", "warning")
+            self.remove_all_btn.clicked.connect(self._remove_all)
+            btn_layout.addWidget(self.remove_all_btn)
+
         btn_layout.addStretch()
 
         close_btn = QPushButton("Close")
@@ -191,3 +221,73 @@ class BrokenLinksDialog(QDialog):
         btn_layout.addWidget(close_btn)
 
         layout.addLayout(btn_layout)
+
+    def _find_files(self):
+        """Try to find the missing files in the project."""
+        selected_rows = self.table.selectionModel().selectedRows()
+
+        if selected_rows:
+            selected_links = [self.rows_data[row.row()] for row in selected_rows]
+        else:
+            selected_links = self.rows_data
+
+        self.find_requested.emit(selected_links)
+        self.accept()
+
+    def _remove_selected(self):
+        """Remove the selected broken links."""
+        from gui.ui_strings import TITLE_NO_SELECTION, MSG_NO_LINKS_SELECTED
+
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, TITLE_NO_SELECTION, MSG_NO_LINKS_SELECTED)
+            return
+
+        selected_links = [self.rows_data[row.row()] for row in selected_rows]
+
+        from gui.ui_strings import TITLE_CONFIRM_REMOVE_LINKS, TMPL_CONFIRM_REMOVE_SELECTED
+
+        items_preview = []
+        for link in selected_links[:5]:
+            items_preview.append(f"• {link['file_name']}: {link['type']} - {link['name']}")
+        if len(selected_links) > 5:
+            items_preview.append(f"... and {len(selected_links) - 5} more")
+
+        items_str = "\n".join(items_preview)
+
+        reply = QMessageBox.question(
+            self,
+            TITLE_CONFIRM_REMOVE_LINKS,
+            TMPL_CONFIRM_REMOVE_SELECTED.format(
+                count=len(selected_links),
+                items=items_str
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.remove_requested.emit(selected_links)
+            self.accept()
+
+    def _remove_all(self):
+        """Remove all broken links."""
+        from gui.ui_strings import TITLE_CONFIRM_REMOVE_LINKS, TMPL_CONFIRM_REMOVE_ALL
+
+        files_with_broken_links = self.results.get("files_with_broken_links", [])
+        total_broken_links = self.results.get("total_broken_links", 0)
+
+        reply = QMessageBox.question(
+            self,
+            TITLE_CONFIRM_REMOVE_LINKS,
+            TMPL_CONFIRM_REMOVE_ALL.format(
+                count=total_broken_links,
+                file_count=len(files_with_broken_links)
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            self.remove_requested.emit(self.rows_data)
+            self.accept()

@@ -13,11 +13,14 @@ from gui.ui_strings import (
     TITLE_CLEANUP_COMPLETE, TITLE_RELOAD_COMPLETE, TITLE_ERROR, TITLE_NO_FILE,
     TITLE_NO_EMPTY_DIRS, TITLE_REMOVE_EMPTY_DIRS, TITLE_RELOAD_LIBS,
     TITLE_UNSUPPORTED_FILE, TITLE_FIND_REFERENCES_RESULTS, TITLE_CHECKING_LINKS,
+    TITLE_REMOVE_COMPLETE, TITLE_REMOVING_LINKS, TITLE_FINDING_FILES,
+    TITLE_RELINK_COMPLETE, TITLE_NO_FILES_FOUND,
     MSG_OPEN_PROJECT_FIRST, MSG_NO_BACKUP_FILES_FOUND, MSG_SELECT_FILE,
-    MSG_NO_EMPTY_DIRS_FOUND, MSG_UNSUPPORTED_FILE_TYPE,
+    MSG_NO_EMPTY_DIRS_FOUND, MSG_UNSUPPORTED_FILE_TYPE, MSG_NO_FILES_FOUND,
     TMPL_CONFIRM_DELETE_BACKUPS, TMPL_FAILED_TO_CLEAN,
     TMPL_FAILED_REMOVE_DIRS, TMPL_FAILED_RELOAD_LIBS, TMPL_FAILED_FIND_REFS,
-    TMPL_FAILED_CHECK_BROKEN_LINKS
+    TMPL_FAILED_CHECK_BROKEN_LINKS, TMPL_REMOVE_COMPLETE, TMPL_FAILED_REMOVE_LINKS,
+    TMPL_FILES_FOUND, TMPL_RELINK_COMPLETE, TMPL_FAILED_FIND_FILES, TMPL_FAILED_RELINK
 )
 
 
@@ -646,7 +649,9 @@ class UtilitiesTab(BaseOperationTab):
                 progress_dialog.update_progress(100, "Check complete!")
                 progress_dialog.exec()
 
-                dialog = BrokenLinksDialog(data, self)
+                dialog = BrokenLinksDialog(data, self.controller, self)
+                dialog.remove_requested.connect(lambda links: self._remove_broken_links(links))
+                dialog.find_requested.connect(lambda links: self._find_and_relink(links))
                 dialog.exec()
 
             except Exception as e:
@@ -659,3 +664,251 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_CHECK_BROKEN_LINKS.format(error=str(e)))
+
+    def _remove_broken_links(self, links_to_remove: list):
+        """Remove the selected broken links.
+
+        Args:
+            links_to_remove: List of broken link dictionaries to remove
+        """
+        try:
+            import json
+            from pathlib import Path
+            from PySide6.QtWidgets import QApplication
+            from gui.progress_dialog import OperationProgressDialog
+            from blender_lib.constants import TIMEOUT_VERY_LONG
+            from services.blender_service import extract_json_from_output
+
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "fix_broken_links.py"
+
+            progress_dialog = OperationProgressDialog(TITLE_REMOVING_LINKS, self)
+            progress_dialog.show()
+            QApplication.processEvents()
+
+            def on_output_line(line: str):
+                """Process each line of output from Blender script."""
+                if line.startswith("LOG: "):
+                    message = line[5:]
+                    progress_dialog.log_text.append(message)
+                    QApplication.processEvents()
+
+            try:
+                links_json = json.dumps(links_to_remove)
+
+                result = runner.run_script_with_progress(
+                    script_path,
+                    {
+                        "links-to-fix": links_json
+                    },
+                    progress_callback=on_output_line,
+                    timeout=TIMEOUT_VERY_LONG
+                )
+
+                data = extract_json_from_output(result.stdout)
+
+                if "error" in data and data["error"]:
+                    raise Exception(data["error"])
+
+                progress_dialog.update_progress(100, "Remove complete!")
+                progress_dialog.exec()
+
+                files_fixed = data.get("files_fixed", [])
+                total_fixed = data.get("total_fixed", 0)
+                errors = data.get("errors", [])
+
+                message_parts = []
+
+                if total_fixed > 0:
+                    message_parts.append(f"<b>Successfully removed {total_fixed} broken link(s)!</b><br>")
+                    message_parts.append(f"<br>Files modified: {len(files_fixed)}<br><br>")
+
+                    for file_info in files_fixed[:5]:
+                        file_name = file_info.get("file_name", "Unknown")
+                        fixed_libraries = file_info.get("fixed_libraries", 0)
+                        fixed_textures = file_info.get("fixed_textures", 0)
+
+                        message_parts.append(f"<b>• {file_name}</b><br>")
+                        if fixed_libraries > 0:
+                            message_parts.append(f"  Removed {fixed_libraries} broken library link(s)<br>")
+                        if fixed_textures > 0:
+                            message_parts.append(f"  Removed {fixed_textures} broken texture(s)<br>")
+
+                    if len(files_fixed) > 5:
+                        message_parts.append(f"<br><i>... and {len(files_fixed) - 5} more file(s)</i><br>")
+                else:
+                    message_parts.append("<b>No broken links were removed.</b><br>")
+
+                if errors:
+                    message_parts.append(f"<br><b>Errors:</b><br>")
+                    for error in errors[:5]:
+                        message_parts.append(f"  • {error}<br>")
+                    if len(errors) > 5:
+                        message_parts.append(f"  ... and {len(errors) - 5} more<br>")
+
+                self.show_info(TITLE_REMOVE_COMPLETE, "".join(message_parts))
+
+            except Exception as e:
+                progress_dialog.mark_error(str(e))
+                progress_dialog.exec()
+                raise
+
+        except Exception as e:
+            self.show_error(TITLE_ERROR, TMPL_FAILED_REMOVE_LINKS.format(error=str(e)))
+
+    def _find_and_relink(self, broken_links: list):
+        """Find missing files and relink them.
+
+        Args:
+            broken_links: List of broken link dictionaries to find and relink
+        """
+        try:
+            import json
+            from pathlib import Path
+            from PySide6.QtWidgets import QApplication, QMessageBox
+            from gui.progress_dialog import OperationProgressDialog
+            from blender_lib.constants import TIMEOUT_VERY_LONG
+            from services.blender_service import extract_json_from_output
+
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "find_and_relink.py"
+            project_root = self.get_project_root()
+
+            progress_dialog = OperationProgressDialog(TITLE_FINDING_FILES, self)
+            progress_dialog.show()
+            QApplication.processEvents()
+
+            def on_output_line(line: str):
+                """Process each line of output from Blender script."""
+                if line.startswith("LOG: "):
+                    message = line[5:]
+                    progress_dialog.log_text.append(message)
+                    QApplication.processEvents()
+
+            try:
+                links_json = json.dumps(broken_links)
+
+                result = runner.run_script_with_progress(
+                    script_path,
+                    {
+                        "broken-links": links_json,
+                        "project-root": str(project_root),
+                        "mode": "find"
+                    },
+                    progress_callback=on_output_line,
+                    timeout=TIMEOUT_VERY_LONG
+                )
+
+                data = extract_json_from_output(result.stdout)
+
+                if "error" in data and data["error"]:
+                    raise Exception(data["error"])
+
+                progress_dialog.update_progress(100, "Search complete!")
+                progress_dialog.exec()
+
+                found_files = data.get("found_files", [])
+                not_found = data.get("not_found", [])
+
+                if not found_files:
+                    self.show_info(TITLE_NO_FILES_FOUND, MSG_NO_FILES_FOUND)
+                    return
+
+                relink_map = {}
+                details_parts = []
+                for found in found_files:
+                    missing_path = found.get("missing_path", "")
+                    missing_filename = found.get("missing_filename", "")
+                    found_paths = found.get("found_paths", [])
+
+                    if found_paths:
+                        new_path = found_paths[0]
+                        relink_map[missing_path] = new_path
+                        details_parts.append(f"• {missing_filename} → {Path(new_path).relative_to(project_root)}")
+
+                details = "\n".join(details_parts[:10])
+                if len(details_parts) > 10:
+                    details += f"\n... and {len(details_parts) - 10} more"
+
+                reply = QMessageBox.question(
+                    self,
+                    TITLE_FINDING_FILES,
+                    TMPL_FILES_FOUND.format(
+                        found_count=len(found_files),
+                        details=details
+                    ),
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+
+                if reply != QMessageBox.Yes:
+                    return
+
+                progress_dialog = OperationProgressDialog(TITLE_FINDING_FILES, self)
+                progress_dialog.show()
+                QApplication.processEvents()
+
+                relink_map_json = json.dumps(relink_map)
+
+                result = runner.run_script_with_progress(
+                    script_path,
+                    {
+                        "broken-links": links_json,
+                        "project-root": str(project_root),
+                        "mode": "relink",
+                        "relink-map": relink_map_json
+                    },
+                    progress_callback=on_output_line,
+                    timeout=TIMEOUT_VERY_LONG
+                )
+
+                data = extract_json_from_output(result.stdout)
+
+                if "error" in data and data["error"]:
+                    raise Exception(data["error"])
+
+                progress_dialog.update_progress(100, "Relink complete!")
+                progress_dialog.exec()
+
+                files_relinked = data.get("files_relinked", [])
+                total_relinked = data.get("total_relinked", 0)
+                errors = data.get("errors", [])
+
+                message_parts = []
+
+                if total_relinked > 0:
+                    message_parts.append(f"<b>Successfully relinked {total_relinked} file(s)!</b><br>")
+                    message_parts.append(f"<br>Files modified: {len(files_relinked)}<br><br>")
+
+                    for file_info in files_relinked[:5]:
+                        file_name = file_info.get("file_name", "Unknown")
+                        relinked_libraries = file_info.get("relinked_libraries", 0)
+                        relinked_textures = file_info.get("relinked_textures", 0)
+
+                        message_parts.append(f"<b>• {file_name}</b><br>")
+                        if relinked_libraries > 0:
+                            message_parts.append(f"  Relinked {relinked_libraries} library link(s)<br>")
+                        if relinked_textures > 0:
+                            message_parts.append(f"  Relinked {relinked_textures} texture(s)<br>")
+
+                    if len(files_relinked) > 5:
+                        message_parts.append(f"<br><i>... and {len(files_relinked) - 5} more file(s)</i><br>")
+                else:
+                    message_parts.append("<b>No files were relinked.</b><br>")
+
+                if errors:
+                    message_parts.append(f"<br><b>Errors:</b><br>")
+                    for error in errors[:5]:
+                        message_parts.append(f"  • {error}<br>")
+                    if len(errors) > 5:
+                        message_parts.append(f"  ... and {len(errors) - 5} more<br>")
+
+                self.show_info(TITLE_RELINK_COMPLETE, "".join(message_parts))
+
+            except Exception as e:
+                progress_dialog.mark_error(str(e))
+                progress_dialog.exec()
+                raise
+
+        except Exception as e:
+            self.show_error(TITLE_ERROR, TMPL_FAILED_FIND_FILES.format(error=str(e)))

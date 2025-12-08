@@ -45,6 +45,12 @@ TITLE_UNSUPPORTED_FILE = "Unsupported File Type"
 TITLE_BROKEN_LINKS = "Broken Links"
 TITLE_NO_BROKEN_LINKS = "No Broken Links"
 TITLE_CHECKING_LINKS = "Checking for Broken Links"
+TITLE_CONFIRM_REMOVE_LINKS = "Confirm Remove Broken Links"
+TITLE_REMOVE_COMPLETE = "Remove Complete"
+TITLE_REMOVING_LINKS = "Removing Broken Links"
+TITLE_FINDING_FILES = "Finding Missing Files"
+TITLE_RELINK_COMPLETE = "Relink Complete"
+TITLE_NO_FILES_FOUND = "No Files Found"
 
 # ============================================================================
 # Common Messages
@@ -68,6 +74,8 @@ MSG_NO_EMPTY_DIRS_FOUND = "No empty directories found in the project."
 MSG_UNSUPPORTED_FILE_TYPE = "Please select a .blend file or texture file (.png, .jpg, .exr, etc.)."
 MSG_NO_BROKEN_LINKS = "No broken links found in the project! All references are valid."
 MSG_CHECKING_BROKEN_LINKS = "Checking for broken links in .blend files..."
+MSG_NO_LINKS_SELECTED = "Please select at least one broken link."
+MSG_NO_FILES_FOUND = "Could not find any of the missing files in the project directory."
 
 # ============================================================================
 # Button Text
@@ -128,3 +136,11 @@ TMPL_FAILED_RELOAD_LIBS = "Failed to reload library links:\n\n{error}"
 TMPL_BROKEN_LINKS_FOUND = "Found {total_broken} broken link(s) in {file_count} file(s):\n\n{details}"
 TMPL_FAILED_CHECK_BROKEN_LINKS = "Failed to check for broken links:\n\n{error}"
 TMPL_CHECKING_FILE = "Checking {filename}..."
+TMPL_CONFIRM_REMOVE_SELECTED = "This will remove {count} selected broken link(s) from the affected .blend files.\n\nBroken links will be unlinked/removed:\n{items}\n\nAre you sure you want to continue?"
+TMPL_CONFIRM_REMOVE_ALL = "This will remove all {count} broken link(s) from {file_count} .blend file(s).\n\nBroken links will be unlinked/removed.\n\nAre you sure you want to continue?"
+TMPL_REMOVE_COMPLETE = "Successfully removed {removed_count} broken link(s) from {file_count} file(s)."
+TMPL_FAILED_REMOVE_LINKS = "Failed to remove broken links:\n\n{error}"
+TMPL_FILES_FOUND = "Found {found_count} missing file(s) in the project:\n\n{details}\n\nDo you want to relink them?"
+TMPL_RELINK_COMPLETE = "Successfully relinked {relinked_count} file(s) in {file_count} .blend file(s)."
+TMPL_FAILED_FIND_FILES = "Failed to find missing files:\n\n{error}"
+TMPL_FAILED_RELINK = "Failed to relink files:\n\n{error}"
