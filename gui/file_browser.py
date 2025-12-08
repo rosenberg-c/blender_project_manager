@@ -4,6 +4,7 @@ import json
 import subprocess
 import platform
 import shutil
+import re
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
+from PySide6.QtCore import QSortFilterProxyModel
 
 from controllers.project_controller import ProjectController
 from services.blender_service import BlenderService
@@ -31,14 +33,100 @@ from gui.ui_strings import (
 )
 
 
+class FileSystemProxyModel(QSortFilterProxyModel):
+    """Proxy model for filtering file system based on search text."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.search_text = ""
+        self.file_system_model = None
+
+    def set_search_text(self, text: str):
+        """Set the search filter text.
+
+        Args:
+            text: Search text to filter by
+        """
+        self.search_text = text.lower()
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
+        """Determine if a row should be shown based on search filter.
+
+        Args:
+            source_row: Row number in source model
+            source_parent: Parent index in source model
+
+        Returns:
+            True if row should be shown, False otherwise
+        """
+        if not self.search_text:
+            # No filter - show everything
+            return True
+
+        # Get the source model
+        source_model = self.sourceModel()
+        if not source_model:
+            return True
+
+        # Get the index for this row
+        index = source_model.index(source_row, 0, source_parent)
+        if not index.isValid():
+            return True
+
+        # Get the file path
+        file_path = Path(source_model.filePath(index))
+
+        # Check if this item matches
+        if self.search_text in file_path.name.lower():
+            return True
+
+        # If this is a directory, check if any children match
+        if file_path.is_dir():
+            return self._has_matching_children(index, source_model)
+
+        return False
+
+    def _has_matching_children(self, parent_index: QModelIndex, source_model) -> bool:
+        """Recursively check if any children match the search.
+
+        Args:
+            parent_index: Parent index to check
+            source_model: Source file system model
+
+        Returns:
+            True if any descendant matches the search
+        """
+        # Check direct children
+        for row in range(source_model.rowCount(parent_index)):
+            child_index = source_model.index(row, 0, parent_index)
+            if not child_index.isValid():
+                continue
+
+            file_path = Path(source_model.filePath(child_index))
+
+            # Check if child matches
+            if self.search_text in file_path.name.lower():
+                return True
+
+            # If child is a directory, check its children
+            if file_path.is_dir():
+                if self._has_matching_children(child_index, source_model):
+                    return True
+
+        return False
+
+
 class FileItemDelegate(QStyledItemDelegate):
     """Custom delegate to draw action icons on selected rows."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, proxy_model=None, file_system_model=None):
         super().__init__(parent)
         self.icon_size = 16
         self.icon_margin = 4
         self.icon_spacing = 2
+        self.proxy_model = proxy_model
+        self.file_system_model = file_system_model
 
     def paint(self, painter, option, index):
         """Paint the item with action icons if selected."""
@@ -49,9 +137,14 @@ class FileItemDelegate(QStyledItemDelegate):
         if option.state & QStyle.StateFlag.State_Selected:
             style = option.widget.style()
 
-            # Get the file path from the model
-            model = index.model()
-            file_path = Path(model.filePath(index))
+            # Get the file path from the model (map to source)
+            if self.proxy_model and self.file_system_model:
+                source_index = self.proxy_model.mapToSource(index)
+                file_path = Path(self.file_system_model.filePath(source_index))
+            else:
+                # Fallback if models not set
+                model = index.model()
+                file_path = Path(model.filePath(index))
 
             x_offset = option.rect.right() - self.icon_margin
             y_pos = option.rect.top() + (option.rect.height() - self.icon_size) // 2
@@ -134,6 +227,7 @@ class FileBrowserWidget(QWidget):
 
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search files...")
+        self.search_box.textChanged.connect(self._on_search_text_changed)
         search_layout.addWidget(self.search_box)
 
         # Collapse/Expand buttons
@@ -149,20 +243,25 @@ class FileBrowserWidget(QWidget):
 
         # Tree view with file system model
         self.tree = QTreeView()
-        self.model = QFileSystemModel()
+        self.file_system_model = QFileSystemModel()
 
         # Set file filters
-        self.model.setNameFilters(['*.blend', '*.png', '*.jpg', '*.jpeg', '*.hdr', '*.exr'])
-        self.model.setNameFilterDisables(False)  # Hide non-matching files
+        self.file_system_model.setNameFilters(['*.blend', '*.png', '*.jpg', '*.jpeg', '*.hdr', '*.exr'])
+        self.file_system_model.setNameFilterDisables(False)  # Hide non-matching files
 
         # Connect to directoryLoaded signal for state restoration
-        self.model.directoryLoaded.connect(self._on_directory_loaded)
+        self.file_system_model.directoryLoaded.connect(self._on_directory_loaded)
 
-        self.tree.setModel(self.model)
+        # Create proxy model for filtering
+        self.proxy_model = FileSystemProxyModel(self)
+        self.proxy_model.setSourceModel(self.file_system_model)
+        self.proxy_model.setRecursiveFilteringEnabled(True)
+
+        self.tree.setModel(self.proxy_model)
         self.tree.setSelectionMode(QTreeView.SingleSelection)
 
         # Set custom delegate to draw trash icon on selected rows
-        self.delegate = FileItemDelegate(self.tree)
+        self.delegate = FileItemDelegate(self.tree, self.proxy_model, self.file_system_model)
         self.tree.setItemDelegate(self.delegate)
 
         # Hide size, type, and date columns for simpler view
@@ -193,8 +292,9 @@ class FileBrowserWidget(QWidget):
         Args:
             path: Root directory path
         """
-        root_index = self.model.setRootPath(str(path))
-        self.tree.setRootIndex(root_index)
+        root_index = self.file_system_model.setRootPath(str(path))
+        proxy_root_index = self.proxy_model.mapFromSource(root_index)
+        self.tree.setRootIndex(proxy_root_index)
         self.tree.expandToDepth(1)  # Expand first level
 
     def collapse_all(self):
@@ -205,13 +305,32 @@ class FileBrowserWidget(QWidget):
         """Expand all directories in the tree."""
         self.tree.expandAll()
 
+    def _on_search_text_changed(self, text: str):
+        """Handle search text changes to filter matching files.
+
+        Args:
+            text: Search text entered by user
+        """
+        # Update the proxy model filter
+        self.proxy_model.set_search_text(text)
+
+        if text:
+            # Expand all to show filtered results
+            self.tree.expandAll()
+        else:
+            # Clear search - collapse all and expand to depth 1
+            self.tree.collapseAll()
+            self.tree.expandToDepth(1)
+
     def _on_item_clicked(self, index):
         """Handle file or directory selection.
 
         Args:
             index: QModelIndex of selected item
         """
-        file_path = Path(self.model.filePath(index))
+        # Map from proxy to source model
+        source_index = self.proxy_model.mapToSource(index)
+        file_path = Path(self.file_system_model.filePath(source_index))
 
         # Emit signal for both files and directories
         if file_path.is_file() or file_path.is_dir():
@@ -223,7 +342,9 @@ class FileBrowserWidget(QWidget):
         Args:
             index: QModelIndex of double-clicked item
         """
-        file_path = Path(self.model.filePath(index))
+        # Map from proxy to source model
+        source_index = self.proxy_model.mapToSource(index)
+        file_path = Path(self.file_system_model.filePath(source_index))
 
         # Only open .blend files
         if not file_path.is_file() or file_path.suffix != '.blend':
@@ -455,7 +576,9 @@ class FileBrowserWidget(QWidget):
         if not indexes:
             return None
 
-        file_path = Path(self.model.filePath(indexes[0]))
+        # Map from proxy to source model
+        source_index = self.proxy_model.mapToSource(indexes[0])
+        file_path = Path(self.file_system_model.filePath(source_index))
         return file_path if (file_path.is_file() or file_path.is_dir()) else None
 
     def save_state(self):
@@ -503,17 +626,19 @@ class FileBrowserWidget(QWidget):
         """Recursively collect expanded paths in the tree.
 
         Args:
-            index: Current index to check
+            index: Current index to check (proxy model index)
             root_path: Project root path
             expanded_paths: List to append expanded paths to
         """
         # Check children first
-        for row in range(self.model.rowCount(index)):
-            child_index = self.model.index(row, 0, index)
+        for row in range(self.proxy_model.rowCount(index)):
+            child_index = self.proxy_model.index(row, 0, index)
             if child_index.isValid():
                 # Check if this child is expanded
                 if self.tree.isExpanded(child_index):
-                    file_path = Path(self.model.filePath(child_index))
+                    # Map to source to get file path
+                    source_index = self.proxy_model.mapToSource(child_index)
+                    file_path = Path(self.file_system_model.filePath(source_index))
                     if file_path.is_dir():
                         try:
                             # Store as relative path to project root
@@ -579,23 +704,27 @@ class FileBrowserWidget(QWidget):
         for rel_path in sorted_paths:
             full_path = root_path / rel_path
             if full_path.exists() and full_path.is_dir():
-                index = self.model.index(str(full_path))
-                if index.isValid():
-                    self.tree.expand(index)
-                    pending.discard(rel_path)
-                    expanded_any = True
+                source_index = self.file_system_model.index(str(full_path))
+                if source_index.isValid():
+                    proxy_index = self.proxy_model.mapFromSource(source_index)
+                    if proxy_index.isValid():
+                        self.tree.expand(proxy_index)
+                        pending.discard(rel_path)
+                        expanded_any = True
 
         # If no more pending expansions, restore selected file or directory
         if not pending and self.restore_data.get('selected_file'):
             selected_item = self.restore_data['selected_file']
             full_path = root_path / selected_item
             if full_path.exists() and (full_path.is_file() or full_path.is_dir()):
-                index = self.model.index(str(full_path))
-                if index.isValid():
-                    self.tree.setCurrentIndex(index)
-                    self.tree.scrollTo(index)
-                    # Emit signal to update operations panel
-                    self.file_selected.emit(full_path)
+                source_index = self.file_system_model.index(str(full_path))
+                if source_index.isValid():
+                    proxy_index = self.proxy_model.mapFromSource(source_index)
+                    if proxy_index.isValid():
+                        self.tree.setCurrentIndex(proxy_index)
+                        self.tree.scrollTo(proxy_index)
+                        # Emit signal to update operations panel
+                        self.file_selected.emit(full_path)
 
             # Clear restoration data
             self.restore_data = None
