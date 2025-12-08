@@ -149,3 +149,29 @@ TMPL_EXACT_AND_SIMILAR_FOUND = "Found exact matches for {exact_count} file(s) an
 TMPL_RELINK_COMPLETE = "Successfully relinked {relinked_count} file(s) in {file_count} .blend file(s)."
 TMPL_FAILED_FIND_FILES = "Failed to find missing files:\n\n{error}"
 TMPL_FAILED_RELINK = "Failed to relink files:\n\n{error}"
+
+# ============================================================================
+# Tooltips
+# ============================================================================
+
+TOOLTIP_MOVE_TO_TRASH = "Move to trash"
+TOOLTIP_FIND_REFERENCES = "Find references to this file"
+TOOLTIP_SHOW_LINKED_FILES = "Show linked files"
+
+# ============================================================================
+# Trash/Delete Messages
+# ============================================================================
+
+MSG_MOVED_TO_TRASH_NOTICE = "\n\nIt will be moved to the trash/recycle bin."
+TMPL_MOVED_TO_TRASH = "'{filename}' has been moved to trash."
+TMPL_FAILED_MOVE_TO_TRASH = "Failed to move '{filename}' to trash: {error}"
+
+# ============================================================================
+# Linked Files Messages
+# ============================================================================
+
+MSG_ANALYZING_LINKS = "Analyzing linked files..."
+MSG_COMPLETE = "Complete"
+TMPL_LOADING_BLEND = "Loading {filename}..."
+TMPL_FAILED_LIST_LINKS = "Failed to list linked files: {error}"
+TMPL_NO_LINKED_FILES = "'{filename}' has no linked libraries or textures."

@@ -6,6 +6,7 @@ import platform
 import shutil
 import re
 from pathlib import Path
+from send2trash import send2trash
 
 from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
 from PySide6.QtGui import QMouseEvent
@@ -32,7 +33,11 @@ from gui.ui_strings import (
     TMPL_DELETE_SUCCESS, TMPL_DELETE_FAILED,
     TMPL_SCANNING_REFS, TMPL_ANALYZING_BLEND, TMPL_REFS_COMPLETE,
     TMPL_NO_REFS_FOUND, TMPL_REFS_FOUND_HEADER, TMPL_REFS_SCANNED_FOOTER,
-    TMPL_FAILED_FIND_REFS
+    TMPL_FAILED_FIND_REFS,
+    TOOLTIP_MOVE_TO_TRASH, TOOLTIP_FIND_REFERENCES, TOOLTIP_SHOW_LINKED_FILES,
+    MSG_MOVED_TO_TRASH_NOTICE, TMPL_MOVED_TO_TRASH, TMPL_FAILED_MOVE_TO_TRASH,
+    MSG_ANALYZING_LINKS, MSG_COMPLETE, TMPL_LOADING_BLEND,
+    TMPL_FAILED_LIST_LINKS, TMPL_NO_LINKED_FILES
 )
 
 
@@ -248,7 +253,7 @@ class FileItemDelegate(QStyledItemDelegate):
                 # Check if hovering over trash icon
                 trash_rect = self.get_trash_icon_rect(style_option)
                 if trash_rect.contains(pos):
-                    QToolTip.showText(event.globalPos(), "Delete file or directory", view)
+                    QToolTip.showText(event.globalPos(), TOOLTIP_MOVE_TO_TRASH, view)
                     return True
 
                 # Get file path (needed for multiple checks)
@@ -263,14 +268,14 @@ class FileItemDelegate(QStyledItemDelegate):
                 find_rect = self.get_find_icon_rect(style_option)
                 if find_rect.contains(pos):
                     if file_path.is_file() and self._is_supported_file(file_path):
-                        QToolTip.showText(event.globalPos(), "Find references to this file", view)
+                        QToolTip.showText(event.globalPos(), TOOLTIP_FIND_REFERENCES, view)
                         return True
 
                 # Check if hovering over show links icon
                 links_rect = self.get_links_icon_rect(style_option)
                 if links_rect.contains(pos):
                     if file_path.is_file() and file_path.suffix.lower() == '.blend':
-                        QToolTip.showText(event.globalPos(), "Show linked files", view)
+                        QToolTip.showText(event.globalPos(), TOOLTIP_SHOW_LINKED_FILES, view)
                         return True
 
         return super().helpEvent(event, view, option, index)
@@ -510,7 +515,7 @@ class FileBrowserWidget(QWidget):
         return super().eventFilter(obj, event)
 
     def _delete_selected(self):
-        """Delete the currently selected file or directory."""
+        """Move the currently selected file or directory to trash."""
         selected_path = self.get_selected_path()
         if not selected_path:
             return
@@ -520,6 +525,9 @@ class FileBrowserWidget(QWidget):
             message = TMPL_CONFIRM_DELETE_DIR.format(dir_path=str(selected_path))
         else:
             message = TMPL_CONFIRM_DELETE_FILE.format(file_path=str(selected_path))
+
+        # Update message to indicate it will be moved to trash
+        message += "\n\nIt will be moved to the trash/recycle bin."
 
         reply = QMessageBox.question(
             self,
@@ -532,17 +540,14 @@ class FileBrowserWidget(QWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        # Perform deletion
+        # Move to trash
         try:
-            if selected_path.is_dir():
-                shutil.rmtree(selected_path)
-            else:
-                selected_path.unlink()
+            send2trash(str(selected_path))
 
             QMessageBox.information(
                 self,
                 TITLE_SUCCESS,
-                TMPL_DELETE_SUCCESS.format(path=str(selected_path))
+                f"'{selected_path.name}' has been moved to trash."
             )
 
             # Clear selection
@@ -552,7 +557,7 @@ class FileBrowserWidget(QWidget):
             QMessageBox.critical(
                 self,
                 TITLE_ERROR,
-                TMPL_DELETE_FAILED.format(path=str(selected_path), error=str(e))
+                f"Failed to move '{selected_path.name}' to trash: {str(e)}"
             )
 
     def _find_references(self):
