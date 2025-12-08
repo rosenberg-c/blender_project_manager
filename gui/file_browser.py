@@ -9,6 +9,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
 from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QToolTip
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle, QStyleOptionViewItem
@@ -195,6 +196,54 @@ class FileItemDelegate(QStyledItemDelegate):
             self.icon_size
         )
 
+    def helpEvent(self, event, view, option, index):
+        """Show tooltip when hovering over action icons.
+
+        Args:
+            event: Help event
+            view: View widget
+            option: Style option
+            index: Model index
+
+        Returns:
+            True if event was handled, False otherwise
+        """
+        if event.type() == event.Type.ToolTip:
+            # Check if this row is selected
+            if view.selectionModel().isSelected(index):
+                # Get the visual rect for this index
+                visual_rect = view.visualRect(index)
+
+                # Create option for delegate
+                style_option = QStyleOptionViewItem()
+                style_option.rect = visual_rect
+
+                # Get mouse position
+                pos = event.pos()
+
+                # Check if hovering over trash icon
+                trash_rect = self.get_trash_icon_rect(style_option)
+                if trash_rect.contains(pos):
+                    QToolTip.showText(event.globalPos(), "Delete file or directory", view)
+                    return True
+
+                # Check if hovering over find references icon
+                find_rect = self.get_find_icon_rect(style_option)
+                if find_rect.contains(pos):
+                    # Get file path to determine tooltip text
+                    if self.proxy_model and self.file_system_model:
+                        source_index = self.proxy_model.mapToSource(index)
+                        file_path = Path(self.file_system_model.filePath(source_index))
+                    else:
+                        model = index.model()
+                        file_path = Path(model.filePath(index))
+
+                    if file_path.is_file() and self._is_supported_file(file_path):
+                        QToolTip.showText(event.globalPos(), "Find references to this file", view)
+                        return True
+
+        return super().helpEvent(event, view, option, index)
+
 
 class FileBrowserWidget(QWidget):
     """File browser with tree view and search."""
@@ -259,6 +308,10 @@ class FileBrowserWidget(QWidget):
 
         self.tree.setModel(self.proxy_model)
         self.tree.setSelectionMode(QTreeView.SingleSelection)
+
+        # Enable mouse tracking for hover tooltips
+        self.tree.setMouseTracking(True)
+        self.tree.viewport().setMouseTracking(True)
 
         # Set custom delegate to draw trash icon on selected rows
         self.delegate = FileItemDelegate(self.tree, self.proxy_model, self.file_system_model)
