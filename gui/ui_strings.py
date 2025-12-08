@@ -81,7 +81,6 @@ BTN_LOAD_OBJECTS_COLLECTIONS = "Load Objects/Collections"
 LABEL_NO_FILE_SELECTED = "<i>No file selected</i>"
 LABEL_NO_BLEND_SELECTED = "<i>No .blend file selected</i>"
 LABEL_SELECT_BLEND_IN_BROWSER = "<i>Select a .blend file in the file browser (You must first lock target file)</i>"
-LABEL_MOVE_PERFORMANCE_INFO = "<i>Note: Each .blend file scan requires launching Blender (~1-2 seconds per file). Operations may take time with many files in your project.</i>"
 
 # ============================================================================
 # Template Messages (use .format() to fill in placeholders)

@@ -14,7 +14,7 @@ from gui.ui_strings import (
     TITLE_NO_FILE, TITLE_NO_CHANGE, TITLE_CONFIRM_OPERATION, TITLE_SUCCESS, TITLE_ERROR,
     MSG_SELECT_FILE, MSG_SOURCE_TARGET_SAME,
     BTN_EXECUTE_MOVE, BTN_EXECUTING,
-    LABEL_NO_FILE_SELECTED, LABEL_MOVE_PERFORMANCE_INFO,
+    LABEL_NO_FILE_SELECTED, 
     TMPL_CONFIRM_MOVE, TMPL_SUCCESS_WITH_CHANGES, TMPL_OPERATION_FAILED
 )
 from blender_lib.constants import TIMEOUT_MEDIUM
@@ -48,12 +48,6 @@ class MoveRenameTab(BaseOperationTab):
         # Move/Rename section
         move_label = QLabel("<b>Move/Rename File or Directory:</b>")
         tab_layout.addWidget(move_label)
-
-        # Performance info
-        perf_info_label = QLabel(LABEL_MOVE_PERFORMANCE_INFO)
-        perf_info_label.setWordWrap(True)
-        perf_info_label.setStyleSheet("color: #666; padding: 5px 0px;")
-        tab_layout.addWidget(perf_info_label)
 
         # New path input
         new_path_label = QLabel("New path:")
