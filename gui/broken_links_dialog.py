@@ -232,7 +232,6 @@ class BrokenLinksDialog(QDialog):
             selected_links = self.rows_data
 
         self.find_requested.emit(selected_links)
-        self.accept()
 
     def _remove_selected(self):
         """Remove the selected broken links."""
@@ -268,7 +267,6 @@ class BrokenLinksDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             self.remove_requested.emit(selected_links)
-            self.accept()
 
     def _remove_all(self):
         """Remove all broken links."""
@@ -290,4 +288,3 @@ class BrokenLinksDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             self.remove_requested.emit(self.rows_data)
-            self.accept()
