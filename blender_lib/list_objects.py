@@ -11,14 +11,15 @@ from script_utils import output_json, create_error_result, create_success_result
 
 
 def list_objects_and_collections():
-    """List all objects and collections in the current blend file.
+    """List all objects, collections, and materials in the current blend file.
 
     Returns:
-        Dictionary with objects and collections
+        Dictionary with objects, collections, and materials
     """
     result = {
         "objects": [],
-        "collections": []
+        "collections": [],
+        "materials": []
     }
 
     # List all objects
@@ -29,12 +30,18 @@ def list_objects_and_collections():
             "collections": [col.name for col in obj.users_collection]
         })
 
-    # List all collections
     for col in bpy.data.collections:
         result["collections"].append({
             "name": col.name,
             "objects_count": len(col.objects),
             "children_count": len(col.children)
+        })
+
+    for mat in bpy.data.materials:
+        result["materials"].append({
+            "name": mat.name,
+            "use_nodes": mat.use_nodes,
+            "users": mat.users
         })
 
     return result
@@ -61,5 +68,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     except Exception as e:
-        output_json(create_error_result(str(e), objects=[], collections=[]))
+        output_json(create_error_result(str(e), objects=[], collections=[], materials=[]))
         sys.exit(1)

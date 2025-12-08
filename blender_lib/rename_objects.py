@@ -15,10 +15,10 @@ from core.file_scanner import find_blend_files
 
 
 def rename_local_items(item_names, find_text, replace_text, dry_run=True):
-    """Rename LOCAL objects and collections (not linked) with find/replace.
+    """Rename LOCAL objects, collections, and materials (not linked) with find/replace.
 
     Args:
-        item_names: List of object/collection names to rename
+        item_names: List of object/collection/material names to rename
         find_text: Text to find in names
         replace_text: Text to replace with
         dry_run: If True, don't actually rename, just preview
@@ -36,9 +36,7 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
         result["errors"].append("Find text cannot be empty")
         return result
 
-    # Process objects (only local, not linked)
     for obj in bpy.data.objects:
-        # Skip linked objects
         if obj.library is not None:
             continue
 
@@ -46,7 +44,6 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
             if find_text in obj.name:
                 new_name = obj.name.replace(find_text, replace_text)
 
-                # Check if new name already exists
                 if new_name != obj.name and new_name in bpy.data.objects:
                     result["warnings"].append(
                         f"Object '{new_name}' already exists, skipping '{obj.name}'"
@@ -59,10 +56,8 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
                     "new_name": new_name
                 })
 
-                # Actually rename if not dry run
                 if not dry_run:
                     obj.name = new_name
-                    # Also rename data block if it has the same name
                     if obj.data and obj.data.name == obj.name.replace(replace_text, find_text):
                         obj.data.name = new_name
             else:
@@ -70,9 +65,7 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
                     f"Find text '{find_text}' not found in object '{obj.name}'"
                 )
 
-    # Process collections (only local, not linked)
     for col in bpy.data.collections:
-        # Skip linked collections
         if col.library is not None:
             continue
 
@@ -80,7 +73,6 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
             if find_text in col.name:
                 new_name = col.name.replace(find_text, replace_text)
 
-                # Check if new name already exists
                 if new_name != col.name and new_name in bpy.data.collections:
                     result["warnings"].append(
                         f"Collection '{new_name}' already exists, skipping '{col.name}'"
@@ -93,12 +85,38 @@ def rename_local_items(item_names, find_text, replace_text, dry_run=True):
                     "new_name": new_name
                 })
 
-                # Actually rename if not dry run
                 if not dry_run:
                     col.name = new_name
             else:
                 result["warnings"].append(
                     f"Find text '{find_text}' not found in collection '{col.name}'"
+                )
+
+    for mat in bpy.data.materials:
+        if mat.library is not None:
+            continue
+
+        if mat.name in item_names:
+            if find_text in mat.name:
+                new_name = mat.name.replace(find_text, replace_text)
+
+                if new_name != mat.name and new_name in bpy.data.materials:
+                    result["warnings"].append(
+                        f"Material '{new_name}' already exists, skipping '{mat.name}'"
+                    )
+                    continue
+
+                result["renamed"].append({
+                    "type": "material",
+                    "old_name": mat.name,
+                    "new_name": new_name
+                })
+
+                if not dry_run:
+                    mat.name = new_name
+            else:
+                result["warnings"].append(
+                    f"Find text '{find_text}' not found in material '{mat.name}'"
                 )
 
     return result

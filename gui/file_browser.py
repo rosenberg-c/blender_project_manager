@@ -670,22 +670,23 @@ class FileBrowserWidget(QWidget):
                 )
                 return
 
-            # Format results
             linked_libraries = result.get("linked_libraries", [])
             linked_textures = result.get("linked_textures", [])
+            linked_materials = result.get("linked_materials", [])
             total_libraries = result.get("total_libraries", 0)
             total_textures = result.get("total_textures", 0)
+            total_materials = result.get("total_materials", 0)
 
-            if total_libraries == 0 and total_textures == 0:
-                message = f"'{selected_path.name}' has no linked libraries or textures."
+            if total_libraries == 0 and total_textures == 0 and total_materials == 0:
+                message = f"'{selected_path.name}' has no linked libraries, textures, or materials."
                 QMessageBox.information(self, TITLE_LINKED_FILES, message)
                 return
 
-            # Show results in table dialog
             dialog = FileLinksDialog(
                 filename=selected_path.name,
                 linked_libraries=linked_libraries,
                 linked_textures=linked_textures,
+                linked_materials=linked_materials,
                 parent=self
             )
             dialog.exec()

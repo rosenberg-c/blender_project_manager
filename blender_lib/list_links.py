@@ -15,16 +15,18 @@ from script_utils import output_json, create_error_result, create_success_result
 
 
 def list_linked_files():
-    """List all linked libraries and textures in the current blend file.
+    """List all linked libraries, textures, and materials in the current blend file.
 
     Returns:
-        Dictionary with linked libraries and textures
+        Dictionary with linked libraries, textures, and materials
     """
     result = {
         "linked_libraries": [],
         "linked_textures": [],
+        "linked_materials": [],
         "total_libraries": 0,
-        "total_textures": 0
+        "total_textures": 0,
+        "total_materials": 0
     }
 
     # Get all linked libraries
@@ -78,6 +80,19 @@ def list_linked_files():
         result["linked_textures"].append(img_info)
         result["total_textures"] += 1
 
+    for mat in bpy.data.materials:
+        if mat.library is not None:
+            continue
+
+        mat_info = {
+            "name": mat.name,
+            "use_nodes": mat.use_nodes,
+            "users": mat.users
+        }
+
+        result["linked_materials"].append(mat_info)
+        result["total_materials"] += 1
+
     return result
 
 
@@ -107,6 +122,7 @@ if __name__ == "__main__":
             str(e),
             traceback=traceback.format_exc(),
             linked_libraries=[],
-            linked_textures=[]
+            linked_textures=[],
+            linked_materials=[]
         ))
         sys.exit(1)

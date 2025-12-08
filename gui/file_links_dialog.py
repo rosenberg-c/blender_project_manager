@@ -10,21 +10,23 @@ from PySide6.QtGui import QColor
 
 
 class FileLinksDialog(QDialog):
-    """Dialog to display linked files (libraries and textures) in a table."""
+    """Dialog to display linked files (libraries, textures, and materials) in a table."""
 
-    def __init__(self, filename: str, linked_libraries: list, linked_textures: list, parent=None):
+    def __init__(self, filename: str, linked_libraries: list, linked_textures: list, linked_materials: list = None, parent=None):
         """Initialize the dialog.
 
         Args:
             filename: Name of the .blend file
             linked_libraries: List of linked library dictionaries
             linked_textures: List of linked texture dictionaries
+            linked_materials: List of linked material dictionaries
             parent: Parent widget
         """
         super().__init__(parent)
         self.filename = filename
         self.linked_libraries = linked_libraries
         self.linked_textures = linked_textures
+        self.linked_materials = linked_materials or []
 
         self.setup_ui()
 
@@ -78,7 +80,24 @@ class FileLinksDialog(QDialog):
             self._populate_textures_table()
             layout.addWidget(self.textures_table)
 
-        # Close button
+        if self.linked_materials:
+            mat_label = QLabel(f"🎨 Materials ({len(self.linked_materials)}):")
+            mat_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
+            layout.addWidget(mat_label)
+
+            self.materials_table = QTableWidget()
+            self.materials_table.setColumnCount(3)
+            self.materials_table.setHorizontalHeaderLabels([
+                "Material Name", "Uses Nodes", "Users"
+            ])
+            self.materials_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+            self.materials_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            self.materials_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            self.materials_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+
+            self._populate_materials_table()
+            layout.addWidget(self.materials_table)
+
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
@@ -161,3 +180,19 @@ class FileLinksDialog(QDialog):
             path_item = QTableWidgetItem(texture.get("filepath", ""))
             path_item.setToolTip(texture.get("absolute_path", ""))
             self.textures_table.setItem(row, 2, path_item)
+
+    def _populate_materials_table(self):
+        """Populate the materials table with data."""
+        self.materials_table.setRowCount(len(self.linked_materials))
+
+        for row, material in enumerate(self.linked_materials):
+            name_item = QTableWidgetItem(material.get("name", "Unknown"))
+            self.materials_table.setItem(row, 0, name_item)
+
+            use_nodes_item = QTableWidgetItem("Yes" if material.get("use_nodes", False) else "No")
+            use_nodes_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.materials_table.setItem(row, 1, use_nodes_item)
+
+            users_item = QTableWidgetItem(str(material.get("users", 0)))
+            users_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.materials_table.setItem(row, 2, users_item)

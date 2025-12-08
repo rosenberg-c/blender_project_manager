@@ -31,7 +31,7 @@ class RenameObjectsTab(BaseOperationTab):
             parent: Parent widget (operations panel)
         """
         super().__init__(controller, parent)
-        self.obj_list_data = {"objects": [], "collections": []}
+        self.obj_list_data = {"objects": [], "collections": [], "materials": []}
         self.setup_ui()
 
     def setup_ui(self):
@@ -60,7 +60,7 @@ class RenameObjectsTab(BaseOperationTab):
         filter_layout.addWidget(filter_label)
 
         self.obj_type_combo = QComboBox()
-        self.obj_type_combo.addItems(["All", "Objects", "Collections"])
+        self.obj_type_combo.addItems(["All", "Objects", "Collections", "Materials"])
         self.obj_type_combo.currentTextChanged.connect(self._filter_objects_list)
         filter_layout.addWidget(self.obj_type_combo)
 
@@ -153,14 +153,13 @@ class RenameObjectsTab(BaseOperationTab):
         if self.is_blend_file(file_path):
             self.obj_load_btn.setEnabled(True)
             self.obj_list.clear()
-            # Clear the stored data
-            self.obj_list_data = {"objects": [], "collections": []}
+            self.obj_list_data = {"objects": [], "collections": [], "materials": []}
         else:
             self.obj_load_btn.setEnabled(False)
             self.obj_preview_btn.setEnabled(False)
             self.obj_execute_btn.setEnabled(False)
             self.obj_list.clear()
-            self.obj_list_data = {"objects": [], "collections": []}
+            self.obj_list_data = {"objects": [], "collections": [], "materials": []}
 
     def _load_objects(self):
         """Load objects and collections from the selected .blend file."""
@@ -194,8 +193,7 @@ class RenameObjectsTab(BaseOperationTab):
                 if "error" in data and data["error"]:
                     raise Exception(data["error"])
 
-                # Ensure we have the expected keys
-                if "objects" not in data or "collections" not in data:
+                if "objects" not in data or "collections" not in data or "materials" not in data:
                     raise Exception(f"Invalid data structure: {list(data.keys())}")
 
                 # Store the data
@@ -221,7 +219,6 @@ class RenameObjectsTab(BaseOperationTab):
 
         filter_type = self.obj_type_combo.currentText()
 
-        # Add objects
         if filter_type in ["All", "Objects"]:
             objects = self.obj_list_data.get("objects", [])
             if isinstance(objects, list):
@@ -232,7 +229,6 @@ class RenameObjectsTab(BaseOperationTab):
                         item.setData(Qt.UserRole, {"type": "object", "data": obj})
                         self.obj_list.addItem(item)
 
-        # Add collections
         if filter_type in ["All", "Collections"]:
             collections = self.obj_list_data.get("collections", [])
             if isinstance(collections, list):
@@ -243,9 +239,20 @@ class RenameObjectsTab(BaseOperationTab):
                         item.setData(Qt.UserRole, {"type": "collection", "data": col})
                         self.obj_list.addItem(item)
 
+        if filter_type in ["All", "Materials"]:
+            materials = self.obj_list_data.get("materials", [])
+            if isinstance(materials, list):
+                for mat in materials:
+                    if isinstance(mat, dict):
+                        nodes_text = "nodes" if mat.get("use_nodes", False) else "no nodes"
+                        item_text = f"🎨 {mat.get('name', 'Unknown')} ({nodes_text}, {mat.get('users', 0)} users)"
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.UserRole, {"type": "material", "data": mat})
+                        self.obj_list.addItem(item)
+
     def _filter_objects_list(self):
         """Filter the objects list based on combo box selection."""
-        if isinstance(self.obj_list_data, dict) and (self.obj_list_data.get("objects") or self.obj_list_data.get("collections")):
+        if isinstance(self.obj_list_data, dict) and (self.obj_list_data.get("objects") or self.obj_list_data.get("collections") or self.obj_list_data.get("materials")):
             self._populate_objects_list()
 
     def _on_object_selection_changed(self):
