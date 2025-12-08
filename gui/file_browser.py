@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from controllers.project_controller import ProjectController
 from services.blender_service import BlenderService
+from gui.progress_dialog import OperationProgressDialog
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
     TITLE_CONFIRM_DELETION, TITLE_SUCCESS, TITLE_ERROR,
@@ -335,16 +336,22 @@ class FileBrowserWidget(QWidget):
             QMessageBox.warning(self, "No Project", "Please open a project first.")
             return
 
+        # Show progress dialog
+        progress_dialog = OperationProgressDialog("Finding References", self)
+        progress_dialog.update_progress(0, f"Scanning project for references to {selected_path.name}...")
+        progress_dialog.show()
+
         try:
             # Run find references script
             blender_service = BlenderService(
                 blender_path=self.project.blender_path,
                 project_root=self.project.project_root
             )
-            result = blender_service.find_references(
-                target_file=str(selected_path),
-                project_root=str(self.project.project_root)
-            )
+
+            progress_dialog.update_progress(50, "Analyzing .blend files...")
+            result = blender_service.find_references(target_file=str(selected_path))
+            progress_dialog.update_progress(100, "Complete!")
+            progress_dialog.close()
 
             if not result.get("success"):
                 QMessageBox.critical(
@@ -405,6 +412,7 @@ class FileBrowserWidget(QWidget):
             QMessageBox.information(self, "Find References", "\n".join(message_lines))
 
         except Exception as e:
+            progress_dialog.close()
             QMessageBox.critical(
                 self,
                 TITLE_ERROR,

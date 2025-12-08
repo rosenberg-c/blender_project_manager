@@ -852,6 +852,49 @@ class BlenderService:
         except Exception as e:
             raise Exception(f"Failed to get scenes from {blend_file.name}: {str(e)}")
 
+    def find_references(self, target_file: str) -> dict:
+        """Find all files that reference the target file.
+
+        Args:
+            target_file: Path to the file to find references to
+
+        Returns:
+            Dictionary with results including:
+                - success: bool
+                - target_file: str
+                - target_name: str
+                - file_type: str (optional, "texture" or "blend")
+                - referencing_files: list
+                - files_scanned: int
+                - errors: list
+                - warnings: list
+        """
+        try:
+            script_path = Path(__file__).parent.parent / "blender_lib" / "find_references.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "target-file": target_file,
+                    "project-root": str(self.project_root)
+                },
+                timeout=300  # 5 minutes for scanning many files
+            )
+
+            data = extract_json_from_output(result.stdout)
+            return data
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "target_file": target_file,
+                "referencing_files": [],
+                "files_scanned": 0,
+                "errors": [str(e)],
+                "warnings": []
+            }
+
     def preview_link_operation(self, params: LinkOperationParams) -> OperationPreview:
         """Preview what will happen when linking objects/collections.
 
