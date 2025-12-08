@@ -10,12 +10,26 @@ import argparse
 import os
 import json
 from pathlib import Path
+from difflib import SequenceMatcher
 
 sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.file_scanner import find_blend_files
+
+
+def similarity_ratio(str1: str, str2: str) -> float:
+    """Calculate similarity ratio between two strings.
+
+    Args:
+        str1: First string
+        str2: Second string
+
+    Returns:
+        Similarity ratio between 0.0 and 1.0
+    """
+    return SequenceMatcher(None, str1.lower(), str2.lower()).ratio()
 
 
 def find_missing_file_in_project(missing_filename: str, project_root: Path):
@@ -35,6 +49,40 @@ def find_missing_file_in_project(missing_filename: str, project_root: Path):
             matches.append(path)
 
     return matches
+
+
+def find_similar_files_in_project(missing_filename: str, project_root: Path, min_similarity: float = 0.6):
+    """Search for files with similar names in the project directory.
+
+    Args:
+        missing_filename: Name of the missing file
+        project_root: Root directory to search
+        min_similarity: Minimum similarity ratio (0.0 to 1.0)
+
+    Returns:
+        List of tuples: (file_path, similarity_ratio) sorted by similarity
+    """
+    missing_name = Path(missing_filename).stem.lower()
+    missing_ext = Path(missing_filename).suffix.lower()
+
+    similar_files = []
+
+    for path in project_root.rglob("*"):
+        if not path.is_file():
+            continue
+
+        if missing_ext and path.suffix.lower() != missing_ext:
+            continue
+
+        candidate_name = path.stem.lower()
+        ratio = similarity_ratio(missing_name, candidate_name)
+
+        if ratio >= min_similarity and ratio < 1.0:
+            similar_files.append((path, ratio))
+
+    similar_files.sort(key=lambda x: x[1], reverse=True)
+
+    return similar_files[:5]
 
 
 def relink_broken_links_in_file(blend_file: Path, relink_map: dict):
@@ -122,6 +170,7 @@ if __name__ == "__main__":
 
             result = {
                 "found_files": [],
+                "similar_files": [],
                 "not_found": [],
                 "errors": []
             }
@@ -137,24 +186,43 @@ if __name__ == "__main__":
 
                 print(f"LOG: Searching for {missing_filename}...", flush=True)
 
-                matches = find_missing_file_in_project(missing_filename, project_root)
+                exact_matches = find_missing_file_in_project(missing_filename, project_root)
 
-                if matches:
+                if exact_matches:
                     result["found_files"].append({
                         "original_link": link,
                         "missing_path": missing_path,
                         "missing_filename": missing_filename,
-                        "found_paths": [str(m) for m in matches]
+                        "found_paths": [str(m) for m in exact_matches]
                     })
-                    print(f"LOG: Found {len(matches)} match(es) for {missing_filename}", flush=True)
+                    print(f"LOG: Found {len(exact_matches)} exact match(es) for {missing_filename}", flush=True)
                 else:
-                    result["not_found"].append({
-                        "original_link": link,
-                        "missing_path": missing_path,
-                        "missing_filename": missing_filename
-                    })
+                    print(f"LOG: No exact match for {missing_filename}, searching for similar files...", flush=True)
+                    similar_matches = find_similar_files_in_project(missing_filename, project_root)
 
-            print(f"LOG: Search complete! Found {len(result['found_files'])} file(s)", flush=True)
+                    if similar_matches:
+                        result["similar_files"].append({
+                            "original_link": link,
+                            "missing_path": missing_path,
+                            "missing_filename": missing_filename,
+                            "similar_matches": [
+                                {
+                                    "path": str(path),
+                                    "similarity": round(ratio * 100, 1)
+                                }
+                                for path, ratio in similar_matches
+                            ]
+                        })
+                        print(f"LOG: Found {len(similar_matches)} similar match(es) for {missing_filename}", flush=True)
+                    else:
+                        result["not_found"].append({
+                            "original_link": link,
+                            "missing_path": missing_path,
+                            "missing_filename": missing_filename
+                        })
+                        print(f"LOG: No matches found for {missing_filename}", flush=True)
+
+            print(f"LOG: Search complete! Found {len(result['found_files'])} exact and {len(result['similar_files'])} similar match(es)", flush=True)
 
             output_json(result)
             sys.exit(0)

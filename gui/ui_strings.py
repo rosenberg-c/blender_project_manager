@@ -51,6 +51,7 @@ TITLE_REMOVING_LINKS = "Removing Broken Links"
 TITLE_FINDING_FILES = "Finding Missing Files"
 TITLE_RELINK_COMPLETE = "Relink Complete"
 TITLE_NO_FILES_FOUND = "No Files Found"
+TITLE_SELECT_SIMILAR_FILES = "Select Similar Files"
 
 # ============================================================================
 # Common Messages
@@ -76,6 +77,7 @@ MSG_NO_BROKEN_LINKS = "No broken links found in the project! All references are 
 MSG_CHECKING_BROKEN_LINKS = "Checking for broken links in .blend files..."
 MSG_NO_LINKS_SELECTED = "Please select at least one broken link."
 MSG_NO_FILES_FOUND = "Could not find any of the missing files in the project directory."
+MSG_SELECT_SIMILAR_FILES = "Some files were not found exactly, but similar files were found. Select which files to use for relinking:"
 
 # ============================================================================
 # Button Text
@@ -141,6 +143,7 @@ TMPL_CONFIRM_REMOVE_ALL = "This will remove all {count} broken link(s) from {fil
 TMPL_REMOVE_COMPLETE = "Successfully removed {removed_count} broken link(s) from {file_count} file(s)."
 TMPL_FAILED_REMOVE_LINKS = "Failed to remove broken links:\n\n{error}"
 TMPL_FILES_FOUND = "Found {found_count} missing file(s) in the project:\n\n{details}\n\nDo you want to relink them?"
+TMPL_EXACT_AND_SIMILAR_FOUND = "Found exact matches for {exact_count} file(s) and similar matches for {similar_count} file(s).\n\nDo you want to review and relink them?"
 TMPL_RELINK_COMPLETE = "Successfully relinked {relinked_count} file(s) in {file_count} .blend file(s)."
 TMPL_FAILED_FIND_FILES = "Failed to find missing files:\n\n{error}"
 TMPL_FAILED_RELINK = "Failed to relink files:\n\n{error}"

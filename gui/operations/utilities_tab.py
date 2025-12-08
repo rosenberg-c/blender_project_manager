@@ -1,13 +1,14 @@
 """Utilities tab for project cleanup operations."""
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox, QTabWidget
+    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox, QTabWidget, QDialog
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
 
 from gui.operations.base_tab import BaseOperationTab
 from gui.broken_links_dialog import BrokenLinksDialog
+from gui.similar_files_dialog import SimilarFilesDialog
 from gui.ui_strings import (
     TITLE_NO_PROJECT, TITLE_NO_BACKUP_FILES, TITLE_CONFIRM_DELETION,
     TITLE_CLEANUP_COMPLETE, TITLE_RELOAD_COMPLETE, TITLE_ERROR, TITLE_NO_FILE,
@@ -20,7 +21,8 @@ from gui.ui_strings import (
     TMPL_CONFIRM_DELETE_BACKUPS, TMPL_FAILED_TO_CLEAN,
     TMPL_FAILED_REMOVE_DIRS, TMPL_FAILED_RELOAD_LIBS, TMPL_FAILED_FIND_REFS,
     TMPL_FAILED_CHECK_BROKEN_LINKS, TMPL_REMOVE_COMPLETE, TMPL_FAILED_REMOVE_LINKS,
-    TMPL_FILES_FOUND, TMPL_RELINK_COMPLETE, TMPL_FAILED_FIND_FILES, TMPL_FAILED_RELINK
+    TMPL_FILES_FOUND, TMPL_EXACT_AND_SIMILAR_FOUND, TMPL_RELINK_COMPLETE,
+    TMPL_FAILED_FIND_FILES, TMPL_FAILED_RELINK
 )
 
 
@@ -808,40 +810,74 @@ class UtilitiesTab(BaseOperationTab):
                 progress_dialog.exec()
 
                 found_files = data.get("found_files", [])
+                similar_files = data.get("similar_files", [])
                 not_found = data.get("not_found", [])
 
-                if not found_files:
+                if not found_files and not similar_files:
                     self.show_info(TITLE_NO_FILES_FOUND, MSG_NO_FILES_FOUND)
                     return
 
                 relink_map = {}
-                details_parts = []
+
                 for found in found_files:
                     missing_path = found.get("missing_path", "")
-                    missing_filename = found.get("missing_filename", "")
                     found_paths = found.get("found_paths", [])
 
                     if found_paths:
                         new_path = found_paths[0]
                         relink_map[missing_path] = new_path
-                        details_parts.append(f"• {missing_filename} → {Path(new_path).relative_to(project_root)}")
 
-                details = "\n".join(details_parts[:10])
-                if len(details_parts) > 10:
-                    details += f"\n... and {len(details_parts) - 10} more"
+                if similar_files:
+                    if found_files:
+                        reply = QMessageBox.question(
+                            self,
+                            TITLE_FINDING_FILES,
+                            TMPL_EXACT_AND_SIMILAR_FOUND.format(
+                                exact_count=len(found_files),
+                                similar_count=len(similar_files)
+                            ),
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.Yes
+                        )
 
-                reply = QMessageBox.question(
-                    self,
-                    TITLE_FINDING_FILES,
-                    TMPL_FILES_FOUND.format(
-                        found_count=len(found_files),
-                        details=details
-                    ),
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
+                        if reply != QMessageBox.Yes:
+                            return
 
-                if reply != QMessageBox.Yes:
+                    similar_dialog = SimilarFilesDialog(similar_files, project_root, self)
+                    if similar_dialog.exec() == QDialog.Accepted:
+                        similar_selections = similar_dialog.get_selected_matches()
+                        relink_map.update(similar_selections)
+                    else:
+                        if not found_files:
+                            return
+                elif found_files:
+                    details_parts = []
+                    for found in found_files:
+                        missing_filename = found.get("missing_filename", "")
+                        found_paths = found.get("found_paths", [])
+                        if found_paths:
+                            new_path = found_paths[0]
+                            details_parts.append(f"• {missing_filename} → {Path(new_path).relative_to(project_root)}")
+
+                    details = "\n".join(details_parts[:10])
+                    if len(details_parts) > 10:
+                        details += f"\n... and {len(details_parts) - 10} more"
+
+                    reply = QMessageBox.question(
+                        self,
+                        TITLE_FINDING_FILES,
+                        TMPL_FILES_FOUND.format(
+                            found_count=len(found_files),
+                            details=details
+                        ),
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.Yes
+                    )
+
+                    if reply != QMessageBox.Yes:
+                        return
+
+                if not relink_map:
                     return
 
                 progress_dialog = OperationProgressDialog(TITLE_FINDING_FILES, self)
