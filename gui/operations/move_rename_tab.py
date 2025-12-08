@@ -154,18 +154,32 @@ class MoveRenameTab(BaseOperationTab):
         is_blend = self.is_blend_file(self.current_file)
         is_texture = self.is_texture_file(self.current_file)
 
+        progress_dialog = None
         try:
-            with self.loading_state(self.preview_btn, "Loading Preview..."):
-                if is_directory or is_blend:
-                    # Handle directories and .blend files using controller
-                    preview = self.controller.preview_move_file(self.current_file, new_path)
+            if is_directory or is_blend:
+                # Use progress dialog for directories and .blend files
+                progress_dialog = OperationProgressDialog("Generating Preview", self)
+                progress_dialog.show()
+                QApplication.processEvents()
 
-                    # Show preview dialog
-                    dialog = OperationPreviewDialog(preview, self)
-                    dialog.exec()
+                # Generate preview with progress updates
+                preview = self.controller.preview_move_file(
+                    self.current_file,
+                    new_path,
+                    progress_dialog.update_progress
+                )
 
-                elif is_texture:
-                    # Handle texture files using Blender script
+                # Close progress dialog
+                progress_dialog.close()
+                progress_dialog = None
+
+                # Show preview results dialog
+                dialog = OperationPreviewDialog(preview, self)
+                dialog.exec()
+
+            elif is_texture:
+                # Handle texture files using Blender script with loading state
+                with self.loading_state(self.preview_btn, "Loading Preview..."):
                     runner = self.get_blender_runner()
                     script_path = Path(__file__).parent.parent.parent / "blender_lib" / "rename_texture.py"
                     project_root = self.get_project_root()
@@ -192,16 +206,20 @@ class MoveRenameTab(BaseOperationTab):
                     # Show results
                     self._show_texture_preview_results(data, new_path)
 
-                else:
-                    # Unsupported file type
-                    self.show_warning(
-                        "Unsupported File Type",
-                        f"Cannot preview move operation for {self.current_file.suffix} files.\n\n"
-                        "Supported: directories, .blend files, and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
-                    )
+            else:
+                # Unsupported file type
+                self.show_warning(
+                    "Unsupported File Type",
+                    f"Cannot preview move operation for {self.current_file.suffix} files.\n\n"
+                    "Supported: directories, .blend files, and texture files (.png, .jpg, .jpeg, .exr, .hdr, .tif, .tiff)"
+                )
 
         except Exception as e:
             self.show_error("Preview Error", f"Failed to generate preview:\n\n{str(e)}")
+        finally:
+            # Ensure progress dialog is closed if it's still open
+            if progress_dialog:
+                progress_dialog.close()
 
     def _show_texture_preview_results(self, data: dict, new_path: Path):
         """Show preview results for texture file rename.

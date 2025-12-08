@@ -18,12 +18,16 @@ class FileOperationsController:
         """
         self.project = project_controller
 
-    def preview_move_file(self, old_path: Path, new_path: Path) -> OperationPreview:
+    def preview_move_file(self,
+                         old_path: Path,
+                         new_path: Path,
+                         progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationPreview:
         """Preview what will change when moving a file or directory.
 
         Args:
             old_path: Current path of the file or directory
             new_path: New path for the file or directory
+            progress_callback: Optional callback for progress updates
 
         Returns:
             OperationPreview with list of changes
@@ -36,9 +40,17 @@ class FileOperationsController:
 
         # Auto-detect file vs directory
         if old_path.is_dir():
-            return self.project.blender_service.preview_move_directory(old_path, new_path)
+            return self.project.blender_service.preview_move_directory(
+                old_path,
+                new_path,
+                progress_callback
+            )
         else:
-            return self.project.blender_service.preview_move_file(old_path, new_path)
+            return self.project.blender_service.preview_move_file(
+                old_path,
+                new_path,
+                progress_callback
+            )
 
     def execute_move_file(self,
                          old_path: Path,

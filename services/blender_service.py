@@ -64,19 +64,27 @@ class BlenderService:
 
     def preview_move_file(self,
                          old_path: Path,
-                         new_path: Path) -> OperationPreview:
+                         new_path: Path,
+                         progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationPreview:
         """Preview what will change when moving a file.
 
         Args:
             old_path: Current path of the file
             new_path: New path for the file
+            progress_callback: Optional callback(percentage, message)
 
         Returns:
             OperationPreview with list of changes
         """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
         changes = []
         warnings = []
         errors = []
+
+        report_progress(0, "Starting preview...")
 
         # Validation
         if not old_path.exists():
@@ -111,6 +119,7 @@ class BlenderService:
         is_blend_file = old_path.suffix.lower() == '.blend'
 
         if is_blend_file:
+            report_progress(10, "Previewing internal path rebasing...")
             # Preview internal path rebasing
             try:
                 script_path = Path(__file__).parent.parent / "blender_lib" / "move_scene.py"
@@ -157,20 +166,39 @@ class BlenderService:
                 warnings.append(f"Could not preview internal path rebasing: {str(e)}")
 
         # Find all .blend files that might reference this file
+        report_progress(30, "Finding .blend files...")
         blend_files = self.filesystem.find_blend_files()
 
-        for blend_file in blend_files:
-            # Skip the file being moved itself
-            if blend_file == old_path:
-                continue
+        # Filter out the file being moved
+        blend_files_to_scan = [f for f in blend_files if f != old_path]
 
-            # Scan each blend for references to the file being moved
+        if not blend_files_to_scan:
+            report_progress(100, "Preview complete")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name} → {new_path.name}",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
+
+        # Batch scan to find which files have references
+        report_progress(40, f"Scanning {len(blend_files_to_scan)} .blend file(s) for references...")
+        files_with_references = self._batch_scan_for_references(blend_files_to_scan, old_path)
+        report_progress(70, f"Found {len(files_with_references)} file(s) with references")
+
+        # Now scan each file with references for detailed change information
+        for i, blend_file in enumerate(files_with_references):
+            progress = 70 + int(30 * (i + 1) / len(files_with_references))
+            report_progress(progress, f"Getting details from {blend_file.name}...")
+
             blend_changes = self._scan_blend_for_references(
                 blend_file,
                 old_path,
                 new_path
             )
             changes.extend(blend_changes)
+
+        report_progress(100, "Preview complete")
 
         return OperationPreview(
             operation_name=f"Move {old_path.name} → {new_path.name}",
@@ -242,17 +270,9 @@ class BlenderService:
                     changes_made=1
                 )
 
-            # Scan all files to find which ones reference the moved file
-            files_to_update = []
-            for i, blend_file in enumerate(blend_files):
-                progress = 20 + int(40 * i / len(blend_files))
-                report_progress(progress, f"Scanning {blend_file.name}...")
-
-                changes = self._scan_blend_for_references(blend_file, old_path, new_path)
-                # Only include files that have actual references (not just errors)
-                has_references = any(c.status != 'error' for c in changes)
-                if has_references:
-                    files_to_update.append(blend_file)
+            # Batch scan all files in a single Blender session
+            files_to_update = self._batch_scan_for_references(blend_files, old_path)
+            report_progress(60, f"Scan complete, found {len(files_to_update)} file(s) with references...")
 
             if not files_to_update:
                 report_progress(100, "Complete (no references found)")
@@ -305,19 +325,27 @@ class BlenderService:
 
     def preview_move_directory(self,
                               old_path: Path,
-                              new_path: Path) -> OperationPreview:
+                              new_path: Path,
+                              progress_callback: Optional[Callable[[int, str], None]] = None) -> OperationPreview:
         """Preview what will change when moving a directory.
 
         Args:
             old_path: Current path of the directory
             new_path: New path for the directory
+            progress_callback: Optional callback(percentage, message)
 
         Returns:
             OperationPreview with list of changes for all files in directory
         """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
         changes = []
         warnings = []
         errors = []
+
+        report_progress(0, "Starting preview...")
 
         # Validation
         if not old_path.exists():
@@ -348,6 +376,7 @@ class BlenderService:
             )
 
         # Find all .blend and texture files in the directory recursively
+        report_progress(5, "Finding files in directory...")
         all_extensions = BLEND_EXTENSIONS + TEXTURE_EXTENSIONS
 
         files_to_move = []
@@ -362,6 +391,8 @@ class BlenderService:
                 warnings=warnings,
                 errors=errors
             )
+
+        report_progress(10, f"Found {len(files_to_move)} file(s) to move")
 
         # For each file, calculate its new path and check for references
         from blender_lib.models import PathChange
@@ -386,27 +417,63 @@ class BlenderService:
             ))
 
         # Now scan all .blend files in the project for references to files being moved
+        report_progress(20, "Finding .blend files in project...")
         all_blend_files = self.filesystem.find_blend_files()
 
+        # Filter out blend files inside the directory being moved
+        blend_files_to_scan = []
         for blend_file in all_blend_files:
-            # Skip blend files that are inside the directory being moved
             try:
                 blend_file.relative_to(old_path)
                 continue  # This file is being moved, skip it
             except ValueError:
-                pass  # Not inside old_path, check for references
+                blend_files_to_scan.append(blend_file)
 
-            # Check if this blend file references any of the files being moved
-            for file in files_to_move:
-                rel_path = file.relative_to(old_path)
-                file_new_path = new_path / rel_path
+        if not blend_files_to_scan:
+            report_progress(100, "Preview complete")
+            return OperationPreview(
+                operation_name=f"Move {old_path.name}/ → {new_path.name}/",
+                changes=changes,
+                warnings=warnings,
+                errors=errors
+            )
 
-                blend_changes = self._scan_blend_for_references(
-                    blend_file,
-                    file,
-                    file_new_path
-                )
-                changes.extend(blend_changes)
+        # Build mapping of files being moved
+        file_mappings = []
+        for file in files_to_move:
+            rel_path = file.relative_to(old_path)
+            file_new_path = new_path / rel_path
+            file_mappings.append((file, file_new_path))
+
+        # For each file being moved, batch scan to find which blend files reference it
+        files_with_references = {}  # blend_file -> list of (old, new) tuples
+        for i, (old_file, new_file) in enumerate(file_mappings):
+            progress = 30 + int(40 * i / len(file_mappings))
+            report_progress(progress, f"Scanning for references to {old_file.name}...")
+
+            files_referencing = self._batch_scan_for_references(blend_files_to_scan, old_file)
+
+            for blend_file in files_referencing:
+                if blend_file not in files_with_references:
+                    files_with_references[blend_file] = []
+                files_with_references[blend_file].append((old_file, new_file))
+
+        # Now get detailed change information from files with references
+        if files_with_references:
+            total_files = len(files_with_references)
+            for i, (blend_file, file_pairs) in enumerate(files_with_references.items()):
+                progress = 70 + int(30 * i / total_files)
+                report_progress(progress, f"Getting details from {blend_file.name}...")
+
+                for old_file, new_file in file_pairs:
+                    blend_changes = self._scan_blend_for_references(
+                        blend_file,
+                        old_file,
+                        new_file
+                    )
+                    changes.extend(blend_changes)
+
+        report_progress(100, "Preview complete")
 
         return OperationPreview(
             operation_name=f"Move {old_path.name}/ → {new_path.name}/",
@@ -478,28 +545,26 @@ class BlenderService:
             report_progress(10, "Scanning for references...")
             all_blend_files = self.filesystem.find_blend_files()
 
-            files_to_update = {}  # blend_file -> list of (old, new) tuples
-
-            for i, blend_file in enumerate(all_blend_files):
-                # Skip blend files inside the directory being moved
+            # Skip blend files inside the directory being moved
+            blend_files_to_scan = []
+            for blend_file in all_blend_files:
                 try:
                     blend_file.relative_to(old_path)
-                    continue
+                    continue  # This file is being moved, skip it
                 except ValueError:
-                    pass
+                    blend_files_to_scan.append(blend_file)
 
-                # Report progress during scan
-                progress = 10 + int(10 * i / len(all_blend_files))
-                report_progress(progress, f"Scanning {blend_file.name}...")
+            files_to_update = {}  # blend_file -> list of (old, new) tuples
 
-                # Check if this blend file references any files being moved
-                for old_file, new_file in file_mappings:
-                    changes = self._scan_blend_for_references(blend_file, old_file, new_file)
-                    has_references = any(c.status != 'error' for c in changes)
-                    if has_references:
-                        if blend_file not in files_to_update:
-                            files_to_update[blend_file] = []
-                        files_to_update[blend_file].append((old_file, new_file))
+            # For each file being moved, batch scan to find which blend files reference it
+            for old_file, new_file in file_mappings:
+                report_progress(10, f"Scanning for references to {old_file.name}...")
+                files_referencing = self._batch_scan_for_references(blend_files_to_scan, old_file)
+
+                for blend_file in files_referencing:
+                    if blend_file not in files_to_update:
+                        files_to_update[blend_file] = []
+                    files_to_update[blend_file].append((old_file, new_file))
 
             # Move the directory
             report_progress(20, f"Moving directory {old_path.name}/...")
@@ -638,26 +703,26 @@ class BlenderService:
                 )
 
             report_progress(40, "File moved successfully, scanning for references...")
-            report_progress(50, "Scanning for files that link to this .blend...")
+            report_progress(50, "Scanning all .blend files for references...")
 
             # Now update references in OTHER .blend files that link to this one
             blend_files = self.filesystem.find_blend_files()
-            files_to_update = []
 
-            for i, blend_file in enumerate(blend_files):
-                # Skip the file we just moved
-                if blend_file == new_path:
-                    continue
+            # Filter out the file we just moved
+            blend_files_to_scan = [f for f in blend_files if f != new_path]
 
-                # Report progress during scan (50% to 70% range)
-                progress = 50 + int(20 * i / len(blend_files))
-                report_progress(progress, f"Scanning {blend_file.name}...")
+            if not blend_files_to_scan:
+                report_progress(100, "Complete!")
+                rebased_count = len(move_result.get("rebased_images", [])) + len(move_result.get("rebased_libraries", []))
+                message = f"Successfully moved {old_path.name}"
+                if rebased_count > 0:
+                    message += f" and rebased {rebased_count} internal path(s)"
+                return OperationResult(success=True, message=message, changes_made=1)
 
-                # Check if this file references the moved .blend
-                changes = self._scan_blend_for_references(blend_file, old_path, new_path)
-                has_references = any(c.status != 'error' for c in changes)
-                if has_references:
-                    files_to_update.append(blend_file)
+            # Batch scan all files in a single Blender session
+            files_to_update = self._batch_scan_for_references(blend_files_to_scan, old_path)
+
+            report_progress(70, f"Found {len(files_to_update)} file(s) with references...")
 
             if not files_to_update:
                 report_progress(100, "Complete!")
@@ -716,6 +781,56 @@ class BlenderService:
                 message=f"Operation failed: {str(e)}",
                 errors=[str(e)]
             )
+
+    def _batch_scan_for_references(self, blend_files: List[Path], target_file: Path) -> List[Path]:
+        """Scan multiple blend files for references in a single Blender session.
+
+        Much faster than launching Blender separately for each file.
+
+        Args:
+            blend_files: List of .blend files to scan
+            target_file: The file we're looking for references to
+
+        Returns:
+            List of .blend files that contain references to target_file
+        """
+        if not blend_files:
+            return []
+
+        try:
+            script_path = self.lib_scripts_dir / "batch_scan_references.py"
+
+            # Create comma-separated list of blend files
+            blend_files_str = ','.join(str(f) for f in blend_files)
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "blend-files": blend_files_str,
+                    "target-file": str(target_file.resolve())
+                },
+                timeout=300  # 5 minutes for scanning many files
+            )
+
+            # Parse JSON output
+            data = extract_json_from_output(result.stdout)
+
+            # Extract list of files with references
+            files_with_refs = data.get("files_with_references", [])
+
+            # Convert back to Path objects
+            return [Path(f) for f in files_with_refs]
+
+        except Exception as e:
+            print(f"Warning: Batch scan failed, falling back to individual scans: {e}")
+            # Fallback to individual scanning if batch fails
+            files_to_update = []
+            for blend_file in blend_files:
+                changes = self._scan_blend_for_references(blend_file, target_file, target_file)
+                has_references = any(c.status != 'error' for c in changes)
+                if has_references:
+                    files_to_update.append(blend_file)
+            return files_to_update
 
     def _scan_blend_for_references(self,
                                    blend_path: Path,
