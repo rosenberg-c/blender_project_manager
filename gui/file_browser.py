@@ -19,6 +19,8 @@ from PySide6.QtCore import QSortFilterProxyModel
 from controllers.project_controller import ProjectController
 from services.blender_service import BlenderService
 from gui.progress_dialog import OperationProgressDialog
+from gui.file_links_dialog import FileLinksDialog
+from gui.file_references_dialog import FileReferencesDialog
 from blender_lib.constants import TEXTURE_EXTENSIONS
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
@@ -606,45 +608,15 @@ class FileBrowserWidget(QWidget):
                 QMessageBox.information(self, TITLE_FINDING_REFERENCES, message)
                 return
 
-            # Build detailed message
-            message_lines = [
-                TMPL_REFS_FOUND_HEADER.format(count=len(referencing_files), filename=selected_path.name),
-                ""
-            ]
-
-            for ref_file in referencing_files:
-                file_name = ref_file.get("file_name", "Unknown")
-                message_lines.append(f"• {file_name}")
-
-                if file_type == "texture":
-                    # Texture references
-                    images_count = ref_file.get("images_count", 0)
-                    images = ref_file.get("images", [])
-                    if images:
-                        image_names = [img.get("name", "") for img in images[:3]]
-                        message_lines.append(f"  Uses texture {images_count} time(s) (as {', '.join(image_names)}{'...' if images_count > 3 else ''})")
-                else:
-                    # .blend file references
-                    linked_objects = ref_file.get("linked_objects", [])
-                    linked_collections = ref_file.get("linked_collections", [])
-
-                    if linked_objects:
-                        obj_preview = ', '.join(linked_objects[:3])
-                        if len(linked_objects) > 3:
-                            obj_preview += "..."
-                        message_lines.append(f"  Linked objects: {len(linked_objects)} ({obj_preview})")
-
-                    if linked_collections:
-                        col_preview = ', '.join(linked_collections[:3])
-                        if len(linked_collections) > 3:
-                            col_preview += "..."
-                        message_lines.append(f"  Linked collections: {len(linked_collections)} ({col_preview})")
-
-                message_lines.append("")
-
-            message_lines.append(TMPL_REFS_SCANNED_FOOTER.format(count=files_scanned))
-
-            QMessageBox.information(self, TITLE_FINDING_REFERENCES, "\n".join(message_lines))
+            # Show results in table dialog
+            dialog = FileReferencesDialog(
+                filename=selected_path.name,
+                file_type=file_type,
+                referencing_files=referencing_files,
+                files_scanned=files_scanned,
+                parent=self
+            )
+            dialog.exec()
 
         except Exception as e:
             progress_dialog.close()
@@ -704,62 +676,14 @@ class FileBrowserWidget(QWidget):
                 QMessageBox.information(self, TITLE_LINKED_FILES, message)
                 return
 
-            # Build detailed message
-            message_lines = [
-                f"'{selected_path.name}' links to:",
-                ""
-            ]
-
-            # Show linked libraries
-            if total_libraries > 0:
-                message_lines.append(f"📦 Linked Libraries ({total_libraries}):")
-                message_lines.append("")
-
-                for lib in linked_libraries:
-                    lib_name = lib.get("name", "Unknown")
-                    exists = lib.get("exists", False)
-                    status = "✓" if exists else "✗ MISSING"
-
-                    message_lines.append(f"  {status} {lib_name}")
-
-                    objects_count = lib.get("objects_count", 0)
-                    collections_count = lib.get("collections_count", 0)
-
-                    if objects_count > 0:
-                        linked_objects = lib.get("linked_objects", [])
-                        obj_preview = ', '.join(linked_objects[:3])
-                        if len(linked_objects) > 3:
-                            obj_preview += "..."
-                        message_lines.append(f"    Objects: {objects_count} ({obj_preview})")
-
-                    if collections_count > 0:
-                        linked_collections = lib.get("linked_collections", [])
-                        col_preview = ', '.join(linked_collections[:3])
-                        if len(linked_collections) > 3:
-                            col_preview += "..."
-                        message_lines.append(f"    Collections: {collections_count} ({col_preview})")
-
-                    message_lines.append("")
-
-            # Show linked textures
-            if total_textures > 0:
-                message_lines.append(f"🖼️  Linked Textures ({total_textures}):")
-                message_lines.append("")
-
-                # Show first 10 textures
-                for i, texture in enumerate(linked_textures[:10]):
-                    if i >= 10:
-                        remaining = total_textures - 10
-                        message_lines.append(f"  ... and {remaining} more")
-                        break
-
-                    tex_name = texture.get("name", "Unknown")
-                    exists = texture.get("exists", False)
-                    status = "✓" if exists else "✗ MISSING"
-
-                    message_lines.append(f"  {status} {tex_name}")
-
-            QMessageBox.information(self, TITLE_LINKED_FILES, "\n".join(message_lines))
+            # Show results in table dialog
+            dialog = FileLinksDialog(
+                filename=selected_path.name,
+                linked_libraries=linked_libraries,
+                linked_textures=linked_textures,
+                parent=self
+            )
+            dialog.exec()
 
         except Exception as e:
             progress_dialog.close()
