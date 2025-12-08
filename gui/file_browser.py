@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLineEdit,
-    QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle
+    QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
 
 from controllers.project_controller import ProjectController
@@ -253,7 +253,7 @@ class FileBrowserWidget(QWidget):
                         visual_rect = self.tree.visualRect(index)
 
                         # Create option for delegate
-                        option = self.tree.viewOptions()
+                        option = QStyleOptionViewItem()
                         option.rect = visual_rect
 
                         # Check for trash icon click
