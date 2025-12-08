@@ -48,11 +48,22 @@ def check_broken_links_in_file(blend_file: Path):
 
     # Check for broken library links
     for lib in bpy.data.libraries:
+        # Store the original filepath
+        original_path = lib.filepath
+
+        # Convert to absolute path for checking
+        # Resolve relative to the current blend file (not relative to the library itself)
         lib_path = bpy.path.abspath(lib.filepath)
 
+        # Debug: Print what we're checking
+        print(f"LOG: Checking library '{lib.name}': stored='{original_path}', resolved='{lib_path}'", flush=True)
+
+        # Check if path is empty or doesn't exist
         if not lib_path or not os.path.exists(lib_path):
             linked_objects = [obj.name for obj in bpy.data.objects if obj.library == lib]
             linked_collections = [col.name for col in bpy.data.collections if col.library == lib]
+
+            print(f"LOG: ⚠️ Broken library detected: '{lib.name}' - path does not exist: '{lib_path}'", flush=True)
 
             result["broken_libraries"].append({
                 "library_name": lib.name,
@@ -64,19 +75,41 @@ def check_broken_links_in_file(blend_file: Path):
                 "collections_count": len(linked_collections)
             })
             result["total_broken"] += 1
+        else:
+            print(f"LOG: ✓ Library OK: '{lib.name}'", flush=True)
 
     # Check for broken texture/image links
     for img in bpy.data.images:
+        # Skip packed images (embedded in the .blend file)
         if img.packed_file:
             continue
 
+        # Skip images with no filepath
         if not img.filepath:
             continue
 
+        # Skip images that come from linked libraries
+        # (they should be checked in their own library file, not here)
+        if img.library is not None:
+            print(f"LOG: Skipping texture '{img.name}' (from linked library '{img.library.name}')", flush=True)
+            continue
+
+        # Store the original filepath
+        original_path = img.filepath
+
+        # Convert to absolute path for checking
+        # For images from linked libraries, we'd need to resolve relative to the library
+        # But we're skipping those above, so this is always relative to the current file
         img_path = bpy.path.abspath(img.filepath)
 
+        # Debug: Print what we're checking
+        print(f"LOG: Checking texture '{img.name}': stored='{original_path}', resolved='{img_path}'", flush=True)
+
+        # Check if path is empty or doesn't exist
         if not img_path or not os.path.exists(img_path):
             users_count = img.users
+
+            print(f"LOG: ⚠️ Broken texture detected: '{img.name}' - path does not exist: '{img_path}'", flush=True)
 
             result["broken_textures"].append({
                 "image_name": img.name,
@@ -86,6 +119,8 @@ def check_broken_links_in_file(blend_file: Path):
                 "size": [img.size[0], img.size[1]] if img.size[0] > 0 else [0, 0]
             })
             result["total_broken"] += 1
+        else:
+            print(f"LOG: ✓ Texture OK: '{img.name}'", flush=True)
 
     return result
 

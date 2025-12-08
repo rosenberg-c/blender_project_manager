@@ -30,6 +30,7 @@ class BrokenLinksDialog(QDialog):
         self.results = results
         self.controller = controller
         self.rows_data = []
+        self.relinked_count = 0
 
         self.setWindowTitle("Broken Links Results")
         self.resize(1000, 600)
@@ -71,8 +72,8 @@ class BrokenLinksDialog(QDialog):
             if errors:
                 summary_text += f" <span style='color: red;'>{len(errors)} errors</span>"
 
-            summary = QLabel(summary_text)
-            layout.addWidget(summary)
+            self.summary_label = QLabel(summary_text)
+            layout.addWidget(self.summary_label)
 
             if errors:
                 errors_label = QLabel("<b>Errors:</b>")
@@ -139,6 +140,7 @@ class BrokenLinksDialog(QDialog):
                         "type": "Library",
                         "name": lib_name,
                         "path": resolved_path or lib_path,
+                        "library_filepath": lib_path,
                         "details": details,
                         "status": "error"
                     })
@@ -157,6 +159,7 @@ class BrokenLinksDialog(QDialog):
                         "type": "Texture",
                         "name": tex_name,
                         "path": resolved_path or tex_path,
+                        "image_filepath": tex_path,
                         "details": details,
                         "status": "error"
                     })
@@ -191,6 +194,9 @@ class BrokenLinksDialog(QDialog):
             self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
 
             layout.addWidget(self.table)
+
+            legend_label = QLabel("<i>Red = Broken links | Green = Successfully relinked</i>")
+            layout.addWidget(legend_label)
 
         btn_layout = QHBoxLayout()
 
@@ -288,3 +294,45 @@ class BrokenLinksDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             self.remove_requested.emit(self.rows_data)
+
+    def mark_as_relinked(self, relinked_paths: set):
+        """Mark rows as relinked (green) based on their missing paths.
+
+        Args:
+            relinked_paths: Set of missing file paths that were successfully relinked
+        """
+        newly_relinked = 0
+
+        for i, row_data in enumerate(self.rows_data):
+            missing_path = row_data.get("path", "")
+
+            if missing_path in relinked_paths:
+                for col in range(5):
+                    item = self.table.item(i, col)
+                    if item:
+                        item.setBackground(QColor(230, 255, 230))
+                        item.setForeground(QColor(0, 100, 0))
+                newly_relinked += 1
+
+        self.relinked_count += newly_relinked
+
+        if hasattr(self, 'summary_label') and newly_relinked > 0:
+            total_broken_links = self.results.get("total_broken_links", 0)
+            files_with_broken_links = self.results.get("files_with_broken_links", [])
+            total_files_checked = self.results.get("total_files_checked", 0)
+            warnings = self.results.get("warnings", [])
+            errors = self.results.get("errors", [])
+
+            summary_text = f"<b>{total_broken_links} broken link(s)</b> found in <b>{len(files_with_broken_links)} file(s)</b>"
+            summary_text += f" (checked {total_files_checked} files total)"
+
+            if self.relinked_count > 0:
+                summary_text += f" | <span style='color: green;'>{self.relinked_count} relinked</span>"
+
+            if warnings:
+                summary_text += f" <span style='color: orange;'>{len(warnings)} warnings</span>"
+
+            if errors:
+                summary_text += f" <span style='color: red;'>{len(errors)} errors</span>"
+
+            self.summary_label.setText(summary_text)

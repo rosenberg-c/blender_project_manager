@@ -652,8 +652,8 @@ class UtilitiesTab(BaseOperationTab):
                 progress_dialog.exec()
 
                 dialog = BrokenLinksDialog(data, self.controller, self)
-                dialog.remove_requested.connect(lambda links: self._remove_broken_links(links))
-                dialog.find_requested.connect(lambda links: self._find_and_relink(links))
+                dialog.remove_requested.connect(lambda links: self._remove_broken_links(links, dialog))
+                dialog.find_requested.connect(lambda links: self._find_and_relink(links, dialog))
                 dialog.exec()
 
             except Exception as e:
@@ -667,11 +667,12 @@ class UtilitiesTab(BaseOperationTab):
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_CHECK_BROKEN_LINKS.format(error=str(e)))
 
-    def _remove_broken_links(self, links_to_remove: list):
+    def _remove_broken_links(self, links_to_remove: list, dialog=None):
         """Remove the selected broken links.
 
         Args:
             links_to_remove: List of broken link dictionaries to remove
+            dialog: Optional BrokenLinksDialog to update after removal
         """
         try:
             import json
@@ -758,11 +759,12 @@ class UtilitiesTab(BaseOperationTab):
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_REMOVE_LINKS.format(error=str(e)))
 
-    def _find_and_relink(self, broken_links: list):
+    def _find_and_relink(self, broken_links: list, dialog=None):
         """Find missing files and relink them.
 
         Args:
             broken_links: List of broken link dictionaries to find and relink
+            dialog: Optional BrokenLinksDialog to update after relinking
         """
         try:
             import json
@@ -940,6 +942,10 @@ class UtilitiesTab(BaseOperationTab):
                         message_parts.append(f"  ... and {len(errors) - 5} more<br>")
 
                 self.show_info(TITLE_RELINK_COMPLETE, "".join(message_parts))
+
+                if dialog and total_relinked > 0:
+                    relinked_paths = set(relink_map.keys())
+                    dialog.mark_as_relinked(relinked_paths)
 
             except Exception as e:
                 progress_dialog.mark_error(str(e))

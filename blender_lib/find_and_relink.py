@@ -85,12 +85,12 @@ def find_similar_files_in_project(missing_filename: str, project_root: Path, min
     return similar_files[:5]
 
 
-def relink_broken_links_in_file(blend_file: Path, relink_map: dict):
+def relink_broken_links_in_file(blend_file: Path, links_with_new_paths: list):
     """Relink broken links in a single .blend file.
 
     Args:
         blend_file: Path to the .blend file
-        relink_map: Dict mapping old paths to new paths
+        links_with_new_paths: List of link dicts with 'name', 'type', and 'new_path'
 
     Returns:
         Dictionary with results
@@ -110,38 +110,56 @@ def relink_broken_links_in_file(blend_file: Path, relink_map: dict):
         result["errors"].append(f"Could not open file: {str(e)}")
         return result
 
-    for old_path, new_path in relink_map.items():
-        for lib in bpy.data.libraries:
-            lib_abs_path = bpy.path.abspath(lib.filepath)
+    for link_info in links_with_new_paths:
+        link_type = link_info.get("type")
+        link_name = link_info.get("name")
+        new_path = link_info.get("new_path")
 
-            if lib_abs_path == old_path or lib.filepath == old_path:
-                try:
-                    lib.filepath = new_path
-                    lib.reload()
-                    result["relinked_libraries"] += 1
-                    result["total_relinked"] += 1
-                    print(f"LOG: Relinked library: {lib.name} -> {Path(new_path).name}", flush=True)
-                except Exception as e:
-                    result["errors"].append(f"Failed to relink library {lib.name}: {str(e)}")
+        # Convert to relative path (with // prefix) for portability
+        try:
+            relative_path = bpy.path.relpath(new_path)
+        except:
+            # If conversion fails, use absolute path
+            relative_path = new_path
 
-        for img in bpy.data.images:
-            if img.packed_file:
-                continue
+        if link_type == "Library":
+            for lib in bpy.data.libraries:
+                if lib.name == link_name:
+                    try:
+                        old_path = lib.filepath
+                        old_resolved = bpy.path.abspath(old_path)
+                        lib.filepath = relative_path
+                        lib.reload()
+                        result["relinked_libraries"] += 1
+                        result["total_relinked"] += 1
+                        print(f"LOG: Relinked library: {lib.name}", flush=True)
+                        print(f"LOG:   Old: stored='{old_path}', resolved='{old_resolved}'", flush=True)
+                        print(f"LOG:   New: stored='{relative_path}', resolved='{new_path}'", flush=True)
+                    except Exception as e:
+                        result["errors"].append(f"Failed to relink library {lib.name}: {str(e)}")
+                        print(f"LOG: ⚠️ Error relinking library {lib.name}: {str(e)}", flush=True)
+                    break
 
-            if not img.filepath:
-                continue
+        elif link_type == "Texture":
+            for img in bpy.data.images:
+                if img.packed_file:
+                    continue
 
-            img_abs_path = bpy.path.abspath(img.filepath)
-
-            if img_abs_path == old_path or img.filepath == old_path:
-                try:
-                    img.filepath = new_path
-                    img.reload()
-                    result["relinked_textures"] += 1
-                    result["total_relinked"] += 1
-                    print(f"LOG: Relinked texture: {img.name} -> {Path(new_path).name}", flush=True)
-                except Exception as e:
-                    result["errors"].append(f"Failed to relink texture {img.name}: {str(e)}")
+                if img.name == link_name:
+                    try:
+                        old_path = img.filepath
+                        old_resolved = bpy.path.abspath(old_path)
+                        img.filepath = relative_path
+                        img.reload()
+                        result["relinked_textures"] += 1
+                        result["total_relinked"] += 1
+                        print(f"LOG: Relinked texture: {img.name}", flush=True)
+                        print(f"LOG:   Old: stored='{old_path}', resolved='{old_resolved}'", flush=True)
+                        print(f"LOG:   New: stored='{relative_path}', resolved='{new_path}'", flush=True)
+                    except Exception as e:
+                        result["errors"].append(f"Failed to relink texture {img.name}: {str(e)}")
+                        print(f"LOG: ⚠️ Error relinking texture {img.name}: {str(e)}", flush=True)
+                    break
 
     if result["total_relinked"] > 0:
         try:
@@ -243,22 +261,26 @@ if __name__ == "__main__":
             for link in broken_links:
                 file_path = link.get("file")
                 if file_path not in files_to_process:
-                    files_to_process[file_path] = {}
+                    files_to_process[file_path] = []
 
                 old_path = link.get("path")
                 if old_path in relink_map:
-                    files_to_process[file_path][old_path] = relink_map[old_path]
+                    files_to_process[file_path].append({
+                        "type": link.get("type"),
+                        "name": link.get("name"),
+                        "new_path": relink_map[old_path]
+                    })
 
             print(f"LOG: Relinking files in {len(files_to_process)} .blend file(s)...", flush=True)
 
-            for file_path, file_relink_map in files_to_process.items():
-                if not file_relink_map:
+            for file_path, links_to_relink in files_to_process.items():
+                if not links_to_relink:
                     continue
 
                 print(f"LOG: Processing {Path(file_path).name}...", flush=True)
                 result["total_files_processed"] += 1
 
-                file_result = relink_broken_links_in_file(Path(file_path), file_relink_map)
+                file_result = relink_broken_links_in_file(Path(file_path), links_to_relink)
 
                 if file_result["total_relinked"] > 0:
                     result["files_relinked"].append(file_result)
