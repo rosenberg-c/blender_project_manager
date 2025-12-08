@@ -302,35 +302,6 @@ def process_files(file_list, new_param):
 3. Add clear docstring
 4. Replace all occurrences with method call
 
-## Performance Optimization Patterns
-
-### Avoid Blender When Possible
-
-**Rule**: Opening Blender files is slow (20+ seconds). Always check if you can avoid it.
-
-**Pattern: Same-Directory Rename Optimization**
-```python
-# ❌ BAD - Always opens file in Blender
-def rename_file(old_path, new_path):
-    blender_runner.run_script(...)  # 20 seconds
-
-# ✅ GOOD - Fast path for same-directory renames
-def rename_file(old_path, new_path):
-    if old_path.parent == new_path.parent:
-        # Simple filesystem rename - relative paths don't need rebasing
-        shutil.move(old_path, new_path)  # < 1 second
-    else:
-        # Different directories - need Blender to rebase paths
-        blender_runner.run_script(...)  # 20 seconds
-```
-
-**Why this works**: When renaming `model.blend` → `character.blend` in the same directory, relative paths like `//textures/albedo.png` still point to the same location.
-
-**When to apply**:
-- File/directory renames in same location
-- Operations that don't affect relative path resolution
-- Any filesystem operation that Blender isn't needed for
-
 ## Pre-Commit Checklist
 
 Before committing code, verify:
@@ -344,7 +315,6 @@ Before committing code, verify:
 - [ ] Docstrings added for public methods
 - [ ] No unnecessary comments (only comment the WHY, not the WHAT)
 - [ ] Code follows existing patterns in the module
-- [ ] Performance: Avoid opening Blender when possible
 
 ## When in Doubt
 
