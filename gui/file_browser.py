@@ -9,7 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal, QModelIndex, QRect, QPoint
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
     QTreeView, QFileSystemModel, QMessageBox, QStyledItemDelegate, QStyle, QStyleOptionViewItem
 )
 
@@ -128,10 +128,24 @@ class FileBrowserWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Search box
+        # Search box and buttons
+        search_layout = QHBoxLayout()
+        search_layout.setContentsMargins(0, 0, 0, 0)
+
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("Search files...")
-        layout.addWidget(self.search_box)
+        search_layout.addWidget(self.search_box)
+
+        # Collapse/Expand buttons
+        self.collapse_all_btn = QPushButton("Collapse All")
+        self.collapse_all_btn.clicked.connect(self.collapse_all)
+        search_layout.addWidget(self.collapse_all_btn)
+
+        self.expand_all_btn = QPushButton("Expand All")
+        self.expand_all_btn.clicked.connect(self.expand_all)
+        search_layout.addWidget(self.expand_all_btn)
+
+        layout.addLayout(search_layout)
 
         # Tree view with file system model
         self.tree = QTreeView()
@@ -182,6 +196,14 @@ class FileBrowserWidget(QWidget):
         root_index = self.model.setRootPath(str(path))
         self.tree.setRootIndex(root_index)
         self.tree.expandToDepth(1)  # Expand first level
+
+    def collapse_all(self):
+        """Collapse all directories in the tree."""
+        self.tree.collapseAll()
+
+    def expand_all(self):
+        """Expand all directories in the tree."""
+        self.tree.expandAll()
 
     def _on_item_clicked(self, index):
         """Handle file or directory selection.
