@@ -116,11 +116,24 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_source_display.setStyleSheet(Theme.get_file_display_style())
         tab_layout.addWidget(self.link_source_display)
 
-        # Load items button
+        # Type filter
+        filter_layout = QHBoxLayout()
+        filter_label = QLabel("Show:")
+        filter_layout.addWidget(filter_label)
+
+        self.link_type_combo = QComboBox()
+        self.link_type_combo.addItems(["All", "Objects", "Collections"])
+        self.link_type_combo.currentTextChanged.connect(self._filter_link_items_list)
+        filter_layout.addWidget(self.link_type_combo)
+
+        # Load button
         self.link_load_btn = QPushButton(BTN_LOAD_OBJECTS_COLLECTIONS)
         self.link_load_btn.setEnabled(False)
         self.link_load_btn.clicked.connect(self._load_link_source)
-        tab_layout.addWidget(self.link_load_btn)
+        filter_layout.addWidget(self.link_load_btn)
+
+        filter_layout.addStretch()
+        tab_layout.addLayout(filter_layout)
 
         # Items list
         items_label = QLabel("Select items to link:")
@@ -333,25 +346,15 @@ class LinkObjectsTab(BaseOperationTab):
                 if "error" in data and data["error"]:
                     raise Exception(data["error"])
 
+                # Ensure we have the expected keys
+                if "objects" not in data or "collections" not in data:
+                    raise Exception(f"Invalid data structure: {list(data.keys())}")
+
                 # Store the data
                 self.link_source_data = data
 
                 # Populate the list
-                self.link_items_list.clear()
-
-                # Add objects
-                for obj in data.get("objects", []):
-                    item_text = f"🔷 {obj.get('name', 'Unknown')} ({obj.get('type', 'Unknown')})"
-                    item = QListWidgetItem(item_text)
-                    item.setData(Qt.UserRole, {"type": "object", "data": obj})
-                    self.link_items_list.addItem(item)
-
-                # Add collections
-                for col in data.get("collections", []):
-                    item_text = f"📁 {col.get('name', 'Unknown')} ({col.get('objects_count', 0)} objects)"
-                    item = QListWidgetItem(item_text)
-                    item.setData(Qt.UserRole, {"type": "collection", "data": col})
-                    self.link_items_list.addItem(item)
+                self._populate_link_items_list()
 
                 # Enable preview and execute buttons
                 self.link_preview_btn.setEnabled(True)
@@ -359,6 +362,43 @@ class LinkObjectsTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_LOAD_ERROR, TMPL_FAILED_TO_LOAD.format(error=str(e)))
+
+    def _populate_link_items_list(self):
+        """Populate the list widget with objects and collections based on filter."""
+        self.link_items_list.clear()
+
+        # Ensure link_source_data is a valid dict
+        if not isinstance(self.link_source_data, dict):
+            return
+
+        filter_type = self.link_type_combo.currentText()
+
+        # Add objects
+        if filter_type in ["All", "Objects"]:
+            objects = self.link_source_data.get("objects", [])
+            if isinstance(objects, list):
+                for obj in objects:
+                    if isinstance(obj, dict):
+                        item_text = f"🔷 {obj.get('name', 'Unknown')} ({obj.get('type', 'Unknown')})"
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.UserRole, {"type": "object", "data": obj})
+                        self.link_items_list.addItem(item)
+
+        # Add collections
+        if filter_type in ["All", "Collections"]:
+            collections = self.link_source_data.get("collections", [])
+            if isinstance(collections, list):
+                for col in collections:
+                    if isinstance(col, dict):
+                        item_text = f"📁 {col.get('name', 'Unknown')} ({col.get('objects_count', 0)} objects)"
+                        item = QListWidgetItem(item_text)
+                        item.setData(Qt.UserRole, {"type": "collection", "data": col})
+                        self.link_items_list.addItem(item)
+
+    def _filter_link_items_list(self):
+        """Filter the items list based on combo box selection."""
+        if isinstance(self.link_source_data, dict) and (self.link_source_data.get("objects") or self.link_source_data.get("collections")):
+            self._populate_link_items_list()
 
     def _preview_link(self):
         """Preview the link operation."""
