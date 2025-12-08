@@ -36,6 +36,7 @@ class OperationProgressDialog(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
         layout.addWidget(self.progress_bar)
 
         # Log text area
@@ -61,7 +62,7 @@ class OperationProgressDialog(QDialog):
         """
         self.progress_bar.setValue(percentage)
         self.status_label.setText(message)
-        self.log_text.append(f"[{percentage}%] {message}")
+        self.log_text.append(message)
 
         # Force Qt to process events and repaint the dialog (real-time updates)
         QApplication.processEvents()

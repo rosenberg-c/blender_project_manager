@@ -480,13 +480,17 @@ class BlenderService:
 
             files_to_update = {}  # blend_file -> list of (old, new) tuples
 
-            for blend_file in all_blend_files:
+            for i, blend_file in enumerate(all_blend_files):
                 # Skip blend files inside the directory being moved
                 try:
                     blend_file.relative_to(old_path)
                     continue
                 except ValueError:
                     pass
+
+                # Report progress during scan
+                progress = 10 + int(10 * i / len(all_blend_files))
+                report_progress(progress, f"Scanning {blend_file.name}...")
 
                 # Check if this blend file references any files being moved
                 for old_file, new_file in file_mappings:
@@ -633,16 +637,21 @@ class BlenderService:
                     errors=errors
                 )
 
+            report_progress(40, "File moved successfully, scanning for references...")
             report_progress(50, "Scanning for files that link to this .blend...")
 
             # Now update references in OTHER .blend files that link to this one
             blend_files = self.filesystem.find_blend_files()
             files_to_update = []
 
-            for blend_file in blend_files:
+            for i, blend_file in enumerate(blend_files):
                 # Skip the file we just moved
                 if blend_file == new_path:
                     continue
+
+                # Report progress during scan (50% to 70% range)
+                progress = 50 + int(20 * i / len(blend_files))
+                report_progress(progress, f"Scanning {blend_file.name}...")
 
                 # Check if this file references the moved .blend
                 changes = self._scan_blend_for_references(blend_file, old_path, new_path)
@@ -670,7 +679,7 @@ class BlenderService:
             changes_made = 1  # The move itself
 
             for i, blend_file in enumerate(files_to_update):
-                progress = 70 + int(25 * i / len(files_to_update))
+                progress = 70 + int(30 * (i + 1) / len(files_to_update))
                 report_progress(progress, f"Updating {blend_file.name}...")
 
                 result = self._update_blend_paths(blend_file, old_path, new_path)
