@@ -23,7 +23,7 @@ from blender_lib.constants import TEXTURE_EXTENSIONS
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
     TITLE_CONFIRM_DELETION, TITLE_SUCCESS, TITLE_ERROR,
-    TITLE_NO_PROJECT, TITLE_FINDING_REFERENCES,
+    TITLE_NO_PROJECT, TITLE_FINDING_REFERENCES, TITLE_LINKED_FILES, TITLE_LOADING_LINKS,
     MSG_BLENDER_NOT_CONFIGURED, MSG_OPEN_PROJECT_FIRST,
     TMPL_FAILED_TO_OPEN_BLENDER,
     TMPL_CONFIRM_DELETE_FILE, TMPL_CONFIRM_DELETE_DIR,
@@ -171,6 +171,18 @@ class FileItemDelegate(QStyledItemDelegate):
                     self.icon_size
                 )
                 find_icon.paint(painter, find_rect)
+                x_offset -= (self.icon_size + self.icon_spacing)
+
+            # Draw show links icon (only for .blend files)
+            if file_path.is_file() and file_path.suffix.lower() == '.blend':
+                links_icon = style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)
+                links_rect = QRect(
+                    x_offset - self.icon_size,
+                    y_pos,
+                    self.icon_size,
+                    self.icon_size
+                )
+                links_icon.paint(painter, links_rect)
 
     def _is_supported_file(self, file_path):
         """Check if file is a .blend or texture file."""
@@ -189,6 +201,16 @@ class FileItemDelegate(QStyledItemDelegate):
     def get_find_icon_rect(self, option):
         """Get the rectangle where the find references icon is drawn."""
         x_offset = option.rect.right() - self.icon_margin - self.icon_size - self.icon_spacing
+        return QRect(
+            x_offset - self.icon_size,
+            option.rect.top() + (option.rect.height() - self.icon_size) // 2,
+            self.icon_size,
+            self.icon_size
+        )
+
+    def get_links_icon_rect(self, option):
+        """Get the rectangle where the show links icon is drawn."""
+        x_offset = option.rect.right() - self.icon_margin - (self.icon_size + self.icon_spacing) * 2
         return QRect(
             x_offset - self.icon_size,
             option.rect.top() + (option.rect.height() - self.icon_size) // 2,
@@ -227,19 +249,26 @@ class FileItemDelegate(QStyledItemDelegate):
                     QToolTip.showText(event.globalPos(), "Delete file or directory", view)
                     return True
 
+                # Get file path (needed for multiple checks)
+                if self.proxy_model and self.file_system_model:
+                    source_index = self.proxy_model.mapToSource(index)
+                    file_path = Path(self.file_system_model.filePath(source_index))
+                else:
+                    model = index.model()
+                    file_path = Path(model.filePath(index))
+
                 # Check if hovering over find references icon
                 find_rect = self.get_find_icon_rect(style_option)
                 if find_rect.contains(pos):
-                    # Get file path to determine tooltip text
-                    if self.proxy_model and self.file_system_model:
-                        source_index = self.proxy_model.mapToSource(index)
-                        file_path = Path(self.file_system_model.filePath(source_index))
-                    else:
-                        model = index.model()
-                        file_path = Path(model.filePath(index))
-
                     if file_path.is_file() and self._is_supported_file(file_path):
                         QToolTip.showText(event.globalPos(), "Find references to this file", view)
+                        return True
+
+                # Check if hovering over show links icon
+                links_rect = self.get_links_icon_rect(style_option)
+                if links_rect.contains(pos):
+                    if file_path.is_file() and file_path.suffix.lower() == '.blend':
+                        QToolTip.showText(event.globalPos(), "Show linked files", view)
                         return True
 
         return super().helpEvent(event, view, option, index)
@@ -470,6 +499,12 @@ class FileBrowserWidget(QWidget):
                             self._find_references()
                             return True  # Event handled
 
+                        # Check for show links icon click
+                        links_rect = self.delegate.get_links_icon_rect(option)
+                        if links_rect.contains(pos):
+                            self._show_linked_files()
+                            return True  # Event handled
+
         return super().eventFilter(obj, event)
 
     def _delete_selected(self):
@@ -617,6 +652,121 @@ class FileBrowserWidget(QWidget):
                 self,
                 TITLE_ERROR,
                 TMPL_FAILED_FIND_REFS.format(error=str(e))
+            )
+
+    def _show_linked_files(self):
+        """Show all files linked by the selected .blend file."""
+        selected_path = self.get_selected_path()
+        if not selected_path or not selected_path.is_file():
+            return
+
+        # Only works for .blend files
+        if selected_path.suffix.lower() != '.blend':
+            return
+
+        if not self.project.is_open:
+            QMessageBox.warning(self, TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
+            return
+
+        # Show progress dialog
+        progress_dialog = OperationProgressDialog(TITLE_LOADING_LINKS, self)
+        progress_dialog.update_progress(0, f"Loading {selected_path.name}...")
+        progress_dialog.show()
+
+        try:
+            # Run list links script
+            blender_service = BlenderService(
+                blender_path=self.project.blender_path,
+                project_root=self.project.project_root
+            )
+
+            progress_dialog.update_progress(50, "Analyzing linked files...")
+            result = blender_service.list_linked_files(blend_file=str(selected_path))
+            progress_dialog.update_progress(100, "Complete")
+            progress_dialog.close()
+
+            if not result.get("success"):
+                QMessageBox.critical(
+                    self,
+                    TITLE_ERROR,
+                    f"Failed to list linked files: {result.get('error', 'Unknown error')}"
+                )
+                return
+
+            # Format results
+            linked_libraries = result.get("linked_libraries", [])
+            linked_textures = result.get("linked_textures", [])
+            total_libraries = result.get("total_libraries", 0)
+            total_textures = result.get("total_textures", 0)
+
+            if total_libraries == 0 and total_textures == 0:
+                message = f"'{selected_path.name}' has no linked libraries or textures."
+                QMessageBox.information(self, TITLE_LINKED_FILES, message)
+                return
+
+            # Build detailed message
+            message_lines = [
+                f"'{selected_path.name}' links to:",
+                ""
+            ]
+
+            # Show linked libraries
+            if total_libraries > 0:
+                message_lines.append(f"📦 Linked Libraries ({total_libraries}):")
+                message_lines.append("")
+
+                for lib in linked_libraries:
+                    lib_name = lib.get("name", "Unknown")
+                    exists = lib.get("exists", False)
+                    status = "✓" if exists else "✗ MISSING"
+
+                    message_lines.append(f"  {status} {lib_name}")
+
+                    objects_count = lib.get("objects_count", 0)
+                    collections_count = lib.get("collections_count", 0)
+
+                    if objects_count > 0:
+                        linked_objects = lib.get("linked_objects", [])
+                        obj_preview = ', '.join(linked_objects[:3])
+                        if len(linked_objects) > 3:
+                            obj_preview += "..."
+                        message_lines.append(f"    Objects: {objects_count} ({obj_preview})")
+
+                    if collections_count > 0:
+                        linked_collections = lib.get("linked_collections", [])
+                        col_preview = ', '.join(linked_collections[:3])
+                        if len(linked_collections) > 3:
+                            col_preview += "..."
+                        message_lines.append(f"    Collections: {collections_count} ({col_preview})")
+
+                    message_lines.append("")
+
+            # Show linked textures
+            if total_textures > 0:
+                message_lines.append(f"🖼️  Linked Textures ({total_textures}):")
+                message_lines.append("")
+
+                # Show first 10 textures
+                for i, texture in enumerate(linked_textures[:10]):
+                    if i >= 10:
+                        remaining = total_textures - 10
+                        message_lines.append(f"  ... and {remaining} more")
+                        break
+
+                    tex_name = texture.get("name", "Unknown")
+                    exists = texture.get("exists", False)
+                    status = "✓" if exists else "✗ MISSING"
+
+                    message_lines.append(f"  {status} {tex_name}")
+
+            QMessageBox.information(self, TITLE_LINKED_FILES, "\n".join(message_lines))
+
+        except Exception as e:
+            progress_dialog.close()
+            QMessageBox.critical(
+                self,
+                TITLE_ERROR,
+                f"Failed to list linked files: {str(e)}"
             )
 
     def get_selected_path(self) -> Path | None:

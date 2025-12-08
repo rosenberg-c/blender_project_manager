@@ -1016,6 +1016,48 @@ class BlenderService:
                 "warnings": []
             }
 
+    def list_linked_files(self, blend_file: str) -> dict:
+        """List all files linked by the given .blend file.
+
+        Args:
+            blend_file: Path to the .blend file
+
+        Returns:
+            Dictionary with results including:
+                - success: bool
+                - linked_libraries: list
+                - linked_textures: list
+                - total_libraries: int
+                - total_textures: int
+                - errors: list
+                - warnings: list
+        """
+        try:
+            script_path = Path(__file__).parent.parent / "blender_lib" / "list_links.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "blend-file": blend_file
+                },
+                timeout=60  # 1 minute should be enough
+            )
+
+            data = extract_json_from_output(result.stdout)
+            return data
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "linked_libraries": [],
+                "linked_textures": [],
+                "total_libraries": 0,
+                "total_textures": 0,
+                "errors": [str(e)],
+                "warnings": []
+            }
+
     def preview_link_operation(self, params: LinkOperationParams) -> OperationPreview:
         """Preview what will happen when linking objects/collections.
 
