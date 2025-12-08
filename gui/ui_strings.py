@@ -157,6 +157,7 @@ TMPL_FAILED_RELINK = "Failed to relink files:\n\n{error}"
 TOOLTIP_MOVE_TO_TRASH = "Move to trash"
 TOOLTIP_FIND_REFERENCES = "Find references to this file"
 TOOLTIP_SHOW_LINKED_FILES = "Show linked files"
+TOOLTIP_PIN_ITEM = "Pin to keep visible when collapsed"
 
 # ============================================================================
 # Trash/Delete Messages

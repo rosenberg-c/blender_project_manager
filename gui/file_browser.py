@@ -34,7 +34,7 @@ from gui.ui_strings import (
     TMPL_SCANNING_REFS, TMPL_ANALYZING_BLEND, TMPL_REFS_COMPLETE,
     TMPL_NO_REFS_FOUND, TMPL_REFS_FOUND_HEADER, TMPL_REFS_SCANNED_FOOTER,
     TMPL_FAILED_FIND_REFS,
-    TOOLTIP_MOVE_TO_TRASH, TOOLTIP_FIND_REFERENCES, TOOLTIP_SHOW_LINKED_FILES,
+    TOOLTIP_MOVE_TO_TRASH, TOOLTIP_FIND_REFERENCES, TOOLTIP_SHOW_LINKED_FILES, TOOLTIP_PIN_ITEM,
     MSG_MOVED_TO_TRASH_NOTICE, TMPL_MOVED_TO_TRASH, TMPL_FAILED_MOVE_TO_TRASH,
     MSG_ANALYZING_LINKS, MSG_COMPLETE, TMPL_LOADING_BLEND,
     TMPL_FAILED_LIST_LINKS, TMPL_NO_LINKED_FILES
@@ -128,34 +128,55 @@ class FileSystemProxyModel(QSortFilterProxyModel):
 class FileItemDelegate(QStyledItemDelegate):
     """Custom delegate to draw action icons on selected rows."""
 
-    def __init__(self, parent=None, proxy_model=None, file_system_model=None):
+    def __init__(self, parent=None, proxy_model=None, file_system_model=None, browser_widget=None):
         super().__init__(parent)
         self.icon_size = 16
         self.icon_margin = 4
         self.icon_spacing = 2
         self.proxy_model = proxy_model
         self.file_system_model = file_system_model
+        self.browser_widget = browser_widget
 
     def paint(self, painter, option, index):
         """Paint the item with action icons if selected."""
-        # Draw the default item
         super().paint(painter, option, index)
 
-        # Draw action icons if this row is selected
-        if option.state & QStyle.StateFlag.State_Selected:
-            style = option.widget.style()
+        if self.proxy_model and self.file_system_model:
+            source_index = self.proxy_model.mapToSource(index)
+            file_path = Path(self.file_system_model.filePath(source_index))
+        else:
+            model = index.model()
+            file_path = Path(model.filePath(index))
 
-            # Get the file path from the model (map to source)
-            if self.proxy_model and self.file_system_model:
-                source_index = self.proxy_model.mapToSource(index)
-                file_path = Path(self.file_system_model.filePath(source_index))
+        style = option.widget.style()
+
+        x_offset = option.rect.right() - self.icon_margin
+        y_pos = option.rect.top() + (option.rect.height() - self.icon_size) // 2
+
+        if self.browser_widget:
+            from PySide6.QtWidgets import QStyleOptionButton
+            check_option = QStyleOptionButton()
+            check_option.rect = QRect(
+                x_offset - self.icon_size,
+                y_pos,
+                self.icon_size,
+                self.icon_size
+            )
+            check_option.state = QStyle.StateFlag.State_Enabled
+
+            if file_path in self.browser_widget.pinned_paths:
+                check_option.state |= QStyle.StateFlag.State_On
             else:
-                # Fallback if models not set
-                model = index.model()
-                file_path = Path(model.filePath(index))
+                check_option.state |= QStyle.StateFlag.State_Off
 
-            x_offset = option.rect.right() - self.icon_margin
-            y_pos = option.rect.top() + (option.rect.height() - self.icon_size) // 2
+            style.drawControl(
+                QStyle.ControlElement.CE_CheckBox,
+                check_option,
+                painter
+            )
+            x_offset -= (self.icon_size + self.icon_spacing)
+
+        if option.state & QStyle.StateFlag.State_Selected:
 
             # Draw trash icon (always shown)
             trash_icon = style.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)
@@ -198,8 +219,9 @@ class FileItemDelegate(QStyledItemDelegate):
 
     def get_trash_icon_rect(self, option):
         """Get the rectangle where the trash icon is drawn."""
+        x_offset = option.rect.right() - self.icon_margin - (self.icon_size + self.icon_spacing)
         return QRect(
-            option.rect.right() - self.icon_size - self.icon_margin,
+            x_offset - self.icon_size,
             option.rect.top() + (option.rect.height() - self.icon_size) // 2,
             self.icon_size,
             self.icon_size
@@ -207,7 +229,7 @@ class FileItemDelegate(QStyledItemDelegate):
 
     def get_find_icon_rect(self, option):
         """Get the rectangle where the find references icon is drawn."""
-        x_offset = option.rect.right() - self.icon_margin - self.icon_size - self.icon_spacing
+        x_offset = option.rect.right() - self.icon_margin - (self.icon_size + self.icon_spacing) * 2
         return QRect(
             x_offset - self.icon_size,
             option.rect.top() + (option.rect.height() - self.icon_size) // 2,
@@ -217,7 +239,17 @@ class FileItemDelegate(QStyledItemDelegate):
 
     def get_links_icon_rect(self, option):
         """Get the rectangle where the show links icon is drawn."""
-        x_offset = option.rect.right() - self.icon_margin - (self.icon_size + self.icon_spacing) * 2
+        x_offset = option.rect.right() - self.icon_margin - (self.icon_size + self.icon_spacing) * 3
+        return QRect(
+            x_offset - self.icon_size,
+            option.rect.top() + (option.rect.height() - self.icon_size) // 2,
+            self.icon_size,
+            self.icon_size
+        )
+
+    def get_pin_checkbox_rect(self, option):
+        """Get the rectangle where the pin checkbox is drawn."""
+        x_offset = option.rect.right() - self.icon_margin
         return QRect(
             x_offset - self.icon_size,
             option.rect.top() + (option.rect.height() - self.icon_size) // 2,
@@ -238,19 +270,17 @@ class FileItemDelegate(QStyledItemDelegate):
             True if event was handled, False otherwise
         """
         if event.type() == event.Type.ToolTip:
-            # Check if this row is selected
+            visual_rect = view.visualRect(index)
+            style_option = QStyleOptionViewItem()
+            style_option.rect = visual_rect
+            pos = event.pos()
+
+            pin_rect = self.get_pin_checkbox_rect(style_option)
+            if pin_rect.contains(pos):
+                QToolTip.showText(event.globalPos(), TOOLTIP_PIN_ITEM, view)
+                return True
+
             if view.selectionModel().isSelected(index):
-                # Get the visual rect for this index
-                visual_rect = view.visualRect(index)
-
-                # Create option for delegate
-                style_option = QStyleOptionViewItem()
-                style_option.rect = visual_rect
-
-                # Get mouse position
-                pos = event.pos()
-
-                # Check if hovering over trash icon
                 trash_rect = self.get_trash_icon_rect(style_option)
                 if trash_rect.contains(pos):
                     QToolTip.showText(event.globalPos(), TOOLTIP_MOVE_TO_TRASH, view)
@@ -298,6 +328,7 @@ class FileBrowserWidget(QWidget):
         self.project = project_controller
         self.config_file = config_file
         self.pending_restore_state = False
+        self.pinned_paths = set()
 
         self.setup_ui()
 
@@ -349,8 +380,7 @@ class FileBrowserWidget(QWidget):
         self.tree.setMouseTracking(True)
         self.tree.viewport().setMouseTracking(True)
 
-        # Set custom delegate to draw trash icon on selected rows
-        self.delegate = FileItemDelegate(self.tree, self.proxy_model, self.file_system_model)
+        self.delegate = FileItemDelegate(self.tree, self.proxy_model, self.file_system_model, self)
         self.tree.setItemDelegate(self.delegate)
 
         # Hide size, type, and date columns for simpler view
@@ -387,12 +417,36 @@ class FileBrowserWidget(QWidget):
         self.tree.expandToDepth(1)  # Expand first level
 
     def collapse_all(self):
-        """Collapse all directories in the tree."""
+        """Collapse all directories in the tree, except pinned items."""
         self.tree.collapseAll()
+        self._expand_pinned_paths()
 
     def expand_all(self):
         """Expand all directories in the tree."""
         self.tree.expandAll()
+
+    def _expand_pinned_paths(self):
+        """Expand all pinned paths and their ancestors."""
+        if not self.project.is_open:
+            return
+
+        root_path = self.project.project_root
+        if not root_path:
+            return
+
+        for pinned_path in self.pinned_paths:
+            ancestors = [pinned_path]
+            current = pinned_path.parent
+            while current != root_path and current > root_path:
+                ancestors.append(current)
+                current = current.parent
+
+            for path in reversed(ancestors):
+                source_index = self.file_system_model.index(str(path))
+                if source_index.isValid():
+                    proxy_index = self.proxy_model.mapFromSource(source_index)
+                    if proxy_index.isValid():
+                        self.tree.expand(proxy_index)
 
     def _on_search_text_changed(self, text: str):
         """Handle search text changes to filter matching files.
@@ -480,39 +534,49 @@ class FileBrowserWidget(QWidget):
         """Filter events to handle clicks on action icons."""
         if obj == self.tree.viewport() and event.type() == event.Type.MouseButtonPress:
             if event.button() == Qt.MouseButton.LeftButton:
-                # Get the index at the click position
                 pos = event.pos()
                 index = self.tree.indexAt(pos)
 
                 if index.isValid():
-                    # Check if this index is selected
+                    visual_rect = self.tree.visualRect(index)
+                    option = QStyleOptionViewItem()
+                    option.rect = visual_rect
+
+                    pin_rect = self.delegate.get_pin_checkbox_rect(option)
+                    if pin_rect.contains(pos):
+                        self._toggle_pin(index)
+                        return True
+
                     if self.tree.selectionModel().isSelected(index):
-                        # Get the visual rect for this index
-                        visual_rect = self.tree.visualRect(index)
-
-                        # Create option for delegate
-                        option = QStyleOptionViewItem()
-                        option.rect = visual_rect
-
-                        # Check for trash icon click
                         trash_rect = self.delegate.get_trash_icon_rect(option)
                         if trash_rect.contains(pos):
                             self._delete_selected()
-                            return True  # Event handled
+                            return True
 
-                        # Check for find references icon click
                         find_rect = self.delegate.get_find_icon_rect(option)
                         if find_rect.contains(pos):
                             self._find_references()
-                            return True  # Event handled
+                            return True
 
-                        # Check for show links icon click
                         links_rect = self.delegate.get_links_icon_rect(option)
                         if links_rect.contains(pos):
                             self._show_linked_files()
-                            return True  # Event handled
+                            return True
 
         return super().eventFilter(obj, event)
+
+    def _toggle_pin(self, index):
+        """Toggle pin status for the item at the given index."""
+        source_index = self.proxy_model.mapToSource(index)
+        file_path = Path(self.file_system_model.filePath(source_index))
+
+        if file_path in self.pinned_paths:
+            self.pinned_paths.remove(file_path)
+        else:
+            self.pinned_paths.add(file_path)
+
+        self.tree.viewport().update()
+        self.save_state()
 
     def _delete_selected(self):
         """Move the currently selected file or directory to trash."""
@@ -742,10 +806,18 @@ class FileBrowserWidget(QWidget):
                 except ValueError:
                     pass  # Selected item is outside project root
 
-            # Save to config
+            pinned_paths = []
+            for path in self.pinned_paths:
+                try:
+                    rel_path = str(path.relative_to(root_path))
+                    pinned_paths.append(rel_path)
+                except (ValueError, AttributeError):
+                    pass
+
             file_browser_state = {
                 'expanded_paths': expanded_paths,
-                'selected_file': selected_item  # Name kept for backward compatibility
+                'selected_file': selected_item,
+                'pinned_paths': pinned_paths
             }
             config_data['file_browser'] = file_browser_state
 
@@ -797,7 +869,12 @@ class FileBrowserWidget(QWidget):
             if not root_path:
                 return
 
-            # Store restoration data to be applied when directories are loaded
+            self.pinned_paths = set()
+            for rel_path in file_browser_state.get('pinned_paths', []):
+                abs_path = root_path / rel_path
+                if abs_path.exists():
+                    self.pinned_paths.add(abs_path)
+
             self.restore_data = {
                 'root_path': root_path,
                 'expanded_paths': file_browser_state.get('expanded_paths', []),
