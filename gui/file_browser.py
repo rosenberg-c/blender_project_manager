@@ -337,7 +337,10 @@ class FileBrowserWidget(QWidget):
 
         try:
             # Run find references script
-            blender_service = BlenderService(self.project.blender_path)
+            blender_service = BlenderService(
+                blender_path=self.project.blender_path,
+                project_root=self.project.project_root
+            )
             result = blender_service.find_references(
                 target_file=str(selected_path),
                 project_root=str(self.project.project_root)
