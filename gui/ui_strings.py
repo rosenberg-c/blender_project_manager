@@ -42,6 +42,9 @@ TITLE_NO_EMPTY_DIRS = "No Empty Directories"
 TITLE_REMOVE_EMPTY_DIRS = "Remove Empty Directories"
 TITLE_RELOAD_LIBS = "Reload Library Links"
 TITLE_UNSUPPORTED_FILE = "Unsupported File Type"
+TITLE_BROKEN_LINKS = "Broken Links"
+TITLE_NO_BROKEN_LINKS = "No Broken Links"
+TITLE_CHECKING_LINKS = "Checking for Broken Links"
 
 # ============================================================================
 # Common Messages
@@ -63,6 +66,8 @@ MSG_NO_BACKUP_FILES_FOUND = "No .blend1 or .blend2 backup files found in the pro
 MSG_BLENDER_NOT_CONFIGURED = "Cannot open file: Blender path not configured.\n\nPlease ensure a project is open with a valid Blender installation."
 MSG_NO_EMPTY_DIRS_FOUND = "No empty directories found in the project."
 MSG_UNSUPPORTED_FILE_TYPE = "Please select a .blend file or texture file (.png, .jpg, .exr, etc.)."
+MSG_NO_BROKEN_LINKS = "No broken links found in the project! All references are valid."
+MSG_CHECKING_BROKEN_LINKS = "Checking for broken links in .blend files..."
 
 # ============================================================================
 # Button Text
@@ -118,3 +123,8 @@ TMPL_FAILED_FIND_REFS = "Failed to find references:\n\n{error}"
 # Utilities templates
 TMPL_FAILED_REMOVE_DIRS = "Failed to remove empty directories:\n\n{error}"
 TMPL_FAILED_RELOAD_LIBS = "Failed to reload library links:\n\n{error}"
+
+# Broken links templates
+TMPL_BROKEN_LINKS_FOUND = "Found {total_broken} broken link(s) in {file_count} file(s):\n\n{details}"
+TMPL_FAILED_CHECK_BROKEN_LINKS = "Failed to check for broken links:\n\n{error}"
+TMPL_CHECKING_FILE = "Checking {filename}..."

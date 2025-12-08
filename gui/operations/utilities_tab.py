@@ -11,11 +11,14 @@ from gui.ui_strings import (
     TITLE_NO_PROJECT, TITLE_NO_BACKUP_FILES, TITLE_CONFIRM_DELETION,
     TITLE_CLEANUP_COMPLETE, TITLE_RELOAD_COMPLETE, TITLE_ERROR, TITLE_NO_FILE,
     TITLE_NO_EMPTY_DIRS, TITLE_REMOVE_EMPTY_DIRS, TITLE_RELOAD_LIBS,
-    TITLE_UNSUPPORTED_FILE, TITLE_FIND_REFERENCES_RESULTS,
+    TITLE_UNSUPPORTED_FILE, TITLE_FIND_REFERENCES_RESULTS, TITLE_BROKEN_LINKS,
+    TITLE_NO_BROKEN_LINKS, TITLE_CHECKING_LINKS,
     MSG_OPEN_PROJECT_FIRST, MSG_NO_BACKUP_FILES_FOUND, MSG_SELECT_FILE,
-    MSG_NO_EMPTY_DIRS_FOUND, MSG_UNSUPPORTED_FILE_TYPE,
+    MSG_NO_EMPTY_DIRS_FOUND, MSG_UNSUPPORTED_FILE_TYPE, MSG_NO_BROKEN_LINKS,
+    MSG_CHECKING_BROKEN_LINKS,
     TMPL_CONFIRM_DELETE_BACKUPS, TMPL_FAILED_TO_CLEAN,
-    TMPL_FAILED_REMOVE_DIRS, TMPL_FAILED_RELOAD_LIBS, TMPL_FAILED_FIND_REFS
+    TMPL_FAILED_REMOVE_DIRS, TMPL_FAILED_RELOAD_LIBS, TMPL_FAILED_FIND_REFS,
+    TMPL_BROKEN_LINKS_FOUND, TMPL_FAILED_CHECK_BROKEN_LINKS, TMPL_CHECKING_FILE
 )
 
 
@@ -49,6 +52,10 @@ class UtilitiesTab(BaseOperationTab):
         # Create Library tab
         library_tab = self._create_library_tab()
         self.sub_tabs.addTab(library_tab, "Library")
+
+        # Create Broken Links tab
+        broken_links_tab = self._create_broken_links_tab()
+        self.sub_tabs.addTab(broken_links_tab, "Broken Links")
 
     def set_file(self, file_path):
         """Set the currently selected file and update button states.
@@ -180,6 +187,41 @@ class UtilitiesTab(BaseOperationTab):
         tab_layout.addStretch()
 
         # Set content widget in scroll area
+        scroll.setWidget(content)
+
+        return scroll
+
+    def _create_broken_links_tab(self):
+        """Create the Broken Links sub-tab for checking broken dependencies."""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        content = QWidget()
+        tab_layout = QVBoxLayout(content)
+
+        info_label = QLabel("<b>Check Broken Links:</b>")
+        tab_layout.addWidget(info_label)
+
+        desc_label = QLabel(
+            "Find all broken links in your .blend files, including:\n"
+            "• Missing library files (linked objects/collections)\n"
+            "• Missing texture files (images)\n"
+            "\n"
+            "This helps identify missing dependencies that need to be fixed."
+        )
+        desc_label.setWordWrap(True)
+        tab_layout.addWidget(desc_label)
+
+        tab_layout.addSpacing(10)
+
+        self.check_broken_links_btn = QPushButton("Check All .blend Files for Broken Links")
+        self.check_broken_links_btn.clicked.connect(self._check_broken_links)
+        self.check_broken_links_btn.setToolTip("Scan all .blend files in the project for broken links")
+        tab_layout.addWidget(self.check_broken_links_btn)
+
+        tab_layout.addStretch()
+
         scroll.setWidget(content)
 
         return scroll
@@ -555,3 +597,134 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_FIND_REFS.format(error=str(e)))
+
+    def _check_broken_links(self):
+        """Check all .blend files in the project for broken links."""
+        if not self.controller.project.is_open:
+            self.show_warning(TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
+            return
+
+        try:
+            from pathlib import Path
+            from PySide6.QtWidgets import QApplication
+            from gui.progress_dialog import OperationProgressDialog
+            from blender_lib.constants import TIMEOUT_VERY_LONG
+            from services.blender_service import extract_json_from_output
+
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "check_broken_links.py"
+            project_root = self.get_project_root()
+
+            self.check_broken_links_btn.setEnabled(False)
+            QApplication.processEvents()
+
+            progress_dialog = OperationProgressDialog(TITLE_CHECKING_LINKS, self)
+            progress_dialog.show()
+            QApplication.processEvents()
+
+            def on_output_line(line: str):
+                """Process each line of output from Blender script."""
+                if line.startswith("LOG: "):
+                    message = line[5:]
+                    progress_dialog.log_text.append(message)
+                    QApplication.processEvents()
+
+            try:
+                result = runner.run_script_with_progress(
+                    script_path,
+                    {
+                        "project-root": str(project_root)
+                    },
+                    progress_callback=on_output_line,
+                    timeout=TIMEOUT_VERY_LONG
+                )
+
+                data = extract_json_from_output(result.stdout)
+
+                if "error" in data and data["error"]:
+                    raise Exception(data["error"])
+
+                progress_dialog.update_progress(100, "Check complete!")
+                progress_dialog.exec()
+
+                files_with_broken_links = data.get("files_with_broken_links", [])
+                total_files_checked = data.get("total_files_checked", 0)
+                total_broken_links = data.get("total_broken_links", 0)
+                errors = data.get("errors", [])
+                warnings = data.get("warnings", [])
+
+                message_parts = []
+
+                if total_broken_links == 0:
+                    message_parts.append(f"<b>No broken links found!</b><br>")
+                    message_parts.append(f"<br>Checked {total_files_checked} .blend file(s).<br>")
+                    message_parts.append(f"<br><i>All library and texture references are valid.</i><br>")
+                else:
+                    message_parts.append(f"<b>Found {total_broken_links} broken link(s) in {len(files_with_broken_links)} file(s):</b><br><br>")
+
+                    for file_info in files_with_broken_links[:5]:
+                        file_name = file_info.get("file_name", "Unknown")
+                        total_broken = file_info.get("total_broken", 0)
+                        broken_libraries = file_info.get("broken_libraries", [])
+                        broken_textures = file_info.get("broken_textures", [])
+
+                        message_parts.append(f"<b>• {file_name}</b> ({total_broken} broken link(s))<br>")
+
+                        if broken_libraries:
+                            message_parts.append(f"  <b>Broken Libraries:</b><br>")
+                            for lib in broken_libraries[:3]:
+                                lib_name = lib.get("library_name", "Unknown")
+                                lib_path = lib.get("library_filepath", "Unknown")
+                                objects_count = lib.get("objects_count", 0)
+                                collections_count = lib.get("collections_count", 0)
+                                message_parts.append(f"    → {lib_name}: {lib_path}<br>")
+                                if objects_count > 0:
+                                    message_parts.append(f"      ({objects_count} object(s))<br>")
+                                if collections_count > 0:
+                                    message_parts.append(f"      ({collections_count} collection(s))<br>")
+                            if len(broken_libraries) > 3:
+                                message_parts.append(f"    ... and {len(broken_libraries) - 3} more<br>")
+
+                        if broken_textures:
+                            message_parts.append(f"  <b>Broken Textures:</b><br>")
+                            for tex in broken_textures[:3]:
+                                tex_name = tex.get("image_name", "Unknown")
+                                tex_path = tex.get("image_filepath", "Unknown")
+                                message_parts.append(f"    → {tex_name}: {tex_path}<br>")
+                            if len(broken_textures) > 3:
+                                message_parts.append(f"    ... and {len(broken_textures) - 3} more<br>")
+
+                        message_parts.append("<br>")
+
+                    if len(files_with_broken_links) > 5:
+                        message_parts.append(f"<i>... and {len(files_with_broken_links) - 5} more file(s) with broken links</i><br>")
+
+                    message_parts.append(f"<br>Total files checked: {total_files_checked}<br>")
+
+                if warnings:
+                    message_parts.append(f"<br><b>Warnings:</b><br>")
+                    for warning in warnings[:5]:
+                        message_parts.append(f"  • {warning}<br>")
+                    if len(warnings) > 5:
+                        message_parts.append(f"  ... and {len(warnings) - 5} more<br>")
+
+                if errors:
+                    message_parts.append(f"<br><b>Errors:</b><br>")
+                    for error in errors[:5]:
+                        message_parts.append(f"  • {error}<br>")
+                    if len(errors) > 5:
+                        message_parts.append(f"  ... and {len(errors) - 5} more<br>")
+
+                title = TITLE_NO_BROKEN_LINKS if total_broken_links == 0 else TITLE_BROKEN_LINKS
+                self.show_info(title, "".join(message_parts))
+
+            except Exception as e:
+                progress_dialog.mark_error(str(e))
+                progress_dialog.exec()
+                raise
+
+            finally:
+                self.check_broken_links_btn.setEnabled(True)
+
+        except Exception as e:
+            self.show_error(TITLE_ERROR, TMPL_FAILED_CHECK_BROKEN_LINKS.format(error=str(e)))
