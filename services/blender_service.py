@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from blender_lib.blender_runner import BlenderRunner
+from blender_lib.constants import TEXTURE_EXTENSIONS, BLEND_EXTENSIONS
 from blender_lib.models import OperationPreview, OperationResult, PathChange, LinkOperationParams
 from blender_lib.script_utils import JSON_OUTPUT_MARKER
 from services.filesystem_service import FilesystemService
@@ -347,9 +348,7 @@ class BlenderService:
             )
 
         # Find all .blend and texture files in the directory recursively
-        blend_extensions = ['.blend']
-        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
-        all_extensions = blend_extensions + texture_extensions
+        all_extensions = BLEND_EXTENSIONS + TEXTURE_EXTENSIONS
 
         files_to_move = []
         for ext in all_extensions:
@@ -460,9 +459,7 @@ class BlenderService:
                 )
 
             # Find all .blend and texture files in the directory
-            blend_extensions = ['.blend']
-            texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
-            all_extensions = blend_extensions + texture_extensions
+            all_extensions = BLEND_EXTENSIONS + TEXTURE_EXTENSIONS
 
             files_to_move = []
             for ext in all_extensions:

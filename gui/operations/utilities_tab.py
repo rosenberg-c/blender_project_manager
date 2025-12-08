@@ -9,9 +9,13 @@ from PySide6.QtGui import QCursor
 from gui.operations.base_tab import BaseOperationTab
 from gui.ui_strings import (
     TITLE_NO_PROJECT, TITLE_NO_BACKUP_FILES, TITLE_CONFIRM_DELETION,
-    TITLE_CLEANUP_COMPLETE, TITLE_ERROR,
-    MSG_OPEN_PROJECT_FIRST, MSG_NO_BACKUP_FILES_FOUND,
-    TMPL_CONFIRM_DELETE_BACKUPS, TMPL_FAILED_TO_CLEAN
+    TITLE_CLEANUP_COMPLETE, TITLE_RELOAD_COMPLETE, TITLE_ERROR, TITLE_NO_FILE,
+    TITLE_NO_EMPTY_DIRS, TITLE_REMOVE_EMPTY_DIRS, TITLE_RELOAD_LIBS,
+    TITLE_UNSUPPORTED_FILE, TITLE_FIND_REFERENCES_RESULTS,
+    MSG_OPEN_PROJECT_FIRST, MSG_NO_BACKUP_FILES_FOUND, MSG_SELECT_FILE,
+    MSG_NO_EMPTY_DIRS_FOUND, MSG_UNSUPPORTED_FILE_TYPE,
+    TMPL_CONFIRM_DELETE_BACKUPS, TMPL_FAILED_TO_CLEAN,
+    TMPL_FAILED_REMOVE_DIRS, TMPL_FAILED_RELOAD_LIBS, TMPL_FAILED_FIND_REFS
 )
 
 
@@ -274,12 +278,12 @@ class UtilitiesTab(BaseOperationTab):
                     continue
 
             if not empty_dirs:
-                self.show_info("No Empty Directories", "No empty directories found in the project.")
+                self.show_info(TITLE_NO_EMPTY_DIRS, MSG_NO_EMPTY_DIRS_FOUND)
                 return
 
             # Confirm with user
             confirmed = self.confirm(
-                "Remove Empty Directories",
+                TITLE_REMOVE_EMPTY_DIRS,
                 f"Found {len(empty_dirs)} empty director{'y' if len(empty_dirs) == 1 else 'ies'}.\n\n"
                 f"Remove {'it' if len(empty_dirs) == 1 else 'them'}?"
             )
@@ -328,7 +332,7 @@ class UtilitiesTab(BaseOperationTab):
             self.show_info(TITLE_CLEANUP_COMPLETE, "".join(message_parts))
 
         except Exception as e:
-            self.show_error(TITLE_ERROR, f"Failed to remove empty directories:\n\n{str(e)}")
+            self.show_error(TITLE_ERROR, TMPL_FAILED_REMOVE_DIRS.format(error=str(e)))
 
     def _reload_libraries(self):
         """Reload all library links in .blend files in the project."""
@@ -412,10 +416,10 @@ class UtilitiesTab(BaseOperationTab):
                 if len(errors) > 5:
                     message_parts.append(f"  ... and {len(errors) - 5} more<br>")
 
-            self.show_info("Reload Complete", "".join(message_parts))
+            self.show_info(TITLE_RELOAD_COMPLETE, "".join(message_parts))
 
         except Exception as e:
-            self.show_error(TITLE_ERROR, f"Failed to reload library links:\n\n{str(e)}")
+            self.show_error(TITLE_ERROR, TMPL_FAILED_RELOAD_LIBS.format(error=str(e)))
 
     def _find_references(self):
         """Find all .blend files that reference the selected .blend file."""
@@ -424,11 +428,11 @@ class UtilitiesTab(BaseOperationTab):
             return
 
         if not self.current_file:
-            self.show_warning("No File Selected", "Please select a file first.")
+            self.show_warning(TITLE_NO_FILE, MSG_SELECT_FILE)
             return
 
         if not (self.is_blend_file(self.current_file) or self.is_texture_file(self.current_file)):
-            self.show_warning("Unsupported File Type", "Please select a .blend file or texture file (.png, .jpg, .exr, etc.).")
+            self.show_warning(TITLE_UNSUPPORTED_FILE, MSG_UNSUPPORTED_FILE_TYPE)
             return
 
         try:
@@ -547,7 +551,7 @@ class UtilitiesTab(BaseOperationTab):
                 if len(errors) > 5:
                     message_parts.append(f"  ... and {len(errors) - 5} more<br>")
 
-            self.show_info("Find References Results", "".join(message_parts))
+            self.show_info(TITLE_FIND_REFERENCES_RESULTS, "".join(message_parts))
 
         except Exception as e:
-            self.show_error(TITLE_ERROR, f"Failed to find references:\n\n{str(e)}")
+            self.show_error(TITLE_ERROR, TMPL_FAILED_FIND_REFS.format(error=str(e)))

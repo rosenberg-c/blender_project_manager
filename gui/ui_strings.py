@@ -32,9 +32,16 @@ TITLE_LINK_FAILED = "Link Failed"
 TITLE_NO_PROJECT = "No Project"
 TITLE_NO_BACKUP_FILES = "No Backup Files"
 TITLE_CLEANUP_COMPLETE = "Cleanup Complete"
+TITLE_RELOAD_COMPLETE = "Reload Complete"
 TITLE_LINK_COMPLETE = "Link Complete"
 TITLE_BLENDER_NOT_FOUND = "Blender Not Found"
 TITLE_ERROR_OPENING_FILE = "Error Opening File"
+TITLE_FINDING_REFERENCES = "Finding References"
+TITLE_FIND_REFERENCES_RESULTS = "Find References Results"
+TITLE_NO_EMPTY_DIRS = "No Empty Directories"
+TITLE_REMOVE_EMPTY_DIRS = "Remove Empty Directories"
+TITLE_RELOAD_LIBS = "Reload Library Links"
+TITLE_UNSUPPORTED_FILE = "Unsupported File Type"
 
 # ============================================================================
 # Common Messages
@@ -54,6 +61,8 @@ MSG_ENTER_COLLECTION_NAME = "Please enter a target collection name."
 MSG_OPEN_PROJECT_FIRST = "Please open a project first."
 MSG_NO_BACKUP_FILES_FOUND = "No .blend1 or .blend2 backup files found in the project."
 MSG_BLENDER_NOT_CONFIGURED = "Cannot open file: Blender path not configured.\n\nPlease ensure a project is open with a valid Blender installation."
+MSG_NO_EMPTY_DIRS_FOUND = "No empty directories found in the project."
+MSG_UNSUPPORTED_FILE_TYPE = "Please select a .blend file or texture file (.png, .jpg, .exr, etc.)."
 
 # ============================================================================
 # Button Text
@@ -96,3 +105,16 @@ TMPL_CONFIRM_DELETE_FILE = "Are you sure you want to delete this file?\n\n{file_
 TMPL_CONFIRM_DELETE_DIR = "Are you sure you want to delete this directory and all its contents?\n\n{dir_path}\n\nThis action cannot be undone."
 TMPL_DELETE_SUCCESS = "Successfully deleted:\n{path}"
 TMPL_DELETE_FAILED = "Failed to delete:\n{path}\n\nError: {error}"
+
+# Find References templates
+TMPL_SCANNING_REFS = "Scanning project for references to {filename}..."
+TMPL_ANALYZING_BLEND = "Analyzing .blend files..."
+TMPL_REFS_COMPLETE = "Complete!"
+TMPL_NO_REFS_FOUND = "No references found.\n\nScanned {count} .blend file(s)."
+TMPL_REFS_FOUND_HEADER = "Found {count} file(s) referencing {filename}:"
+TMPL_REFS_SCANNED_FOOTER = "Scanned {count} .blend file(s)."
+TMPL_FAILED_FIND_REFS = "Failed to find references:\n\n{error}"
+
+# Utilities templates
+TMPL_FAILED_REMOVE_DIRS = "Failed to remove empty directories:\n\n{error}"
+TMPL_FAILED_RELOAD_LIBS = "Failed to reload library links:\n\n{error}"

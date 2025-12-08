@@ -16,12 +16,18 @@ from PySide6.QtWidgets import (
 from controllers.project_controller import ProjectController
 from services.blender_service import BlenderService
 from gui.progress_dialog import OperationProgressDialog
+from blender_lib.constants import TEXTURE_EXTENSIONS
 from gui.ui_strings import (
     TITLE_BLENDER_NOT_FOUND, TITLE_ERROR_OPENING_FILE,
     TITLE_CONFIRM_DELETION, TITLE_SUCCESS, TITLE_ERROR,
-    MSG_BLENDER_NOT_CONFIGURED, TMPL_FAILED_TO_OPEN_BLENDER,
+    TITLE_NO_PROJECT, TITLE_FINDING_REFERENCES,
+    MSG_BLENDER_NOT_CONFIGURED, MSG_OPEN_PROJECT_FIRST,
+    TMPL_FAILED_TO_OPEN_BLENDER,
     TMPL_CONFIRM_DELETE_FILE, TMPL_CONFIRM_DELETE_DIR,
-    TMPL_DELETE_SUCCESS, TMPL_DELETE_FAILED
+    TMPL_DELETE_SUCCESS, TMPL_DELETE_FAILED,
+    TMPL_SCANNING_REFS, TMPL_ANALYZING_BLEND, TMPL_REFS_COMPLETE,
+    TMPL_NO_REFS_FOUND, TMPL_REFS_FOUND_HEADER, TMPL_REFS_SCANNED_FOOTER,
+    TMPL_FAILED_FIND_REFS
 )
 
 
@@ -75,8 +81,7 @@ class FileItemDelegate(QStyledItemDelegate):
     def _is_supported_file(self, file_path):
         """Check if file is a .blend or texture file."""
         suffix = file_path.suffix.lower()
-        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
-        return suffix == '.blend' or suffix in texture_extensions
+        return suffix == '.blend' or suffix in TEXTURE_EXTENSIONS
 
     def get_trash_icon_rect(self, option):
         """Get the rectangle where the trash icon is drawn."""
@@ -325,20 +330,19 @@ class FileBrowserWidget(QWidget):
 
         # Check if file type is supported
         suffix = selected_path.suffix.lower()
-        texture_extensions = ['.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff']
         is_blend = suffix == '.blend'
-        is_texture = suffix in texture_extensions
+        is_texture = suffix in TEXTURE_EXTENSIONS
 
         if not (is_blend or is_texture):
             return
 
         if not self.project.is_open:
-            QMessageBox.warning(self, "No Project", "Please open a project first.")
+            QMessageBox.warning(self, TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
             return
 
         # Show progress dialog
-        progress_dialog = OperationProgressDialog("Finding References", self)
-        progress_dialog.update_progress(0, f"Scanning project for references to {selected_path.name}...")
+        progress_dialog = OperationProgressDialog(TITLE_FINDING_REFERENCES, self)
+        progress_dialog.update_progress(0, TMPL_SCANNING_REFS.format(filename=selected_path.name))
         progress_dialog.show()
 
         try:
@@ -348,16 +352,16 @@ class FileBrowserWidget(QWidget):
                 project_root=self.project.project_root
             )
 
-            progress_dialog.update_progress(50, "Analyzing .blend files...")
+            progress_dialog.update_progress(50, TMPL_ANALYZING_BLEND)
             result = blender_service.find_references(target_file=str(selected_path))
-            progress_dialog.update_progress(100, "Complete!")
+            progress_dialog.update_progress(100, TMPL_REFS_COMPLETE)
             progress_dialog.close()
 
             if not result.get("success"):
                 QMessageBox.critical(
                     self,
                     TITLE_ERROR,
-                    f"Failed to find references:\n\n{result.get('error', 'Unknown error')}"
+                    TMPL_FAILED_FIND_REFS.format(error=result.get('error', 'Unknown error'))
                 )
                 return
 
@@ -367,13 +371,13 @@ class FileBrowserWidget(QWidget):
             files_scanned = result.get("files_scanned", 0)
 
             if not referencing_files:
-                message = f"No references found.\n\nScanned {files_scanned} .blend file(s)."
-                QMessageBox.information(self, "Find References", message)
+                message = TMPL_NO_REFS_FOUND.format(count=files_scanned)
+                QMessageBox.information(self, TITLE_FINDING_REFERENCES, message)
                 return
 
             # Build detailed message
             message_lines = [
-                f"Found {len(referencing_files)} file(s) referencing {selected_path.name}:",
+                TMPL_REFS_FOUND_HEADER.format(count=len(referencing_files), filename=selected_path.name),
                 ""
             ]
 
@@ -407,16 +411,16 @@ class FileBrowserWidget(QWidget):
 
                 message_lines.append("")
 
-            message_lines.append(f"Scanned {files_scanned} .blend file(s).")
+            message_lines.append(TMPL_REFS_SCANNED_FOOTER.format(count=files_scanned))
 
-            QMessageBox.information(self, "Find References", "\n".join(message_lines))
+            QMessageBox.information(self, TITLE_FINDING_REFERENCES, "\n".join(message_lines))
 
         except Exception as e:
             progress_dialog.close()
             QMessageBox.critical(
                 self,
                 TITLE_ERROR,
-                f"Failed to find references:\n\n{str(e)}"
+                TMPL_FAILED_FIND_REFS.format(error=str(e))
             )
 
     def get_selected_path(self) -> Path | None:
