@@ -182,13 +182,101 @@ blender_project_manager/
 - Mock external dependencies (Blender, file system when appropriate)
 - Aim for high coverage of critical paths
 
-### 8. Documentation
+### 8. Documentation and Comments
 
 **ALWAYS** document public interfaces:
 - Use docstrings for all public methods and classes
 - Include `Args:`, `Returns:`, and `Raises:` sections
 - Keep docstrings concise but complete
-- **Don't** add unnecessary comments for self-evident code
+
+**AVOID unnecessary comments:**
+- Code should be self-documenting through clear variable/function names
+- Only add comments when code behavior is non-obvious
+- Comments should explain **WHY**, not **WHAT**
+- If you need to explain what code does, consider refactoring for clarity
+
+**Good reasons to add comments:**
+- Complex algorithms or business logic
+- Performance optimizations that look unusual
+- Workarounds for bugs in external libraries
+- Important constraints or assumptions
+- Security-related decisions
+
+**Examples**:
+
+```python
+# ❌ BAD - Unnecessary comments that state the obvious
+def rename_file(old_path, new_path):
+    # Check if old path exists
+    if not old_path.exists():
+        return False
+
+    # Move the file to new location
+    shutil.move(str(old_path), str(new_path))
+
+    # Return success
+    return True
+
+# ✅ GOOD - Self-documenting code, only comment the non-obvious
+def rename_file(old_path, new_path):
+    if not old_path.exists():
+        return False
+
+    # OPTIMIZATION: Fast path for same-directory renames
+    # If moving within the same directory, relative paths don't need rebasing
+    # This avoids the 20-second Blender startup overhead
+    if old_path.parent == new_path.parent:
+        shutil.move(str(old_path), str(new_path))
+        return True
+
+    # Different directories - use Blender to rebase internal paths
+    return _move_with_rebasing(old_path, new_path)
+```
+
+```python
+# ❌ BAD - Comment explains what (code already shows this)
+# Loop through all blend files
+for blend_file in blend_files:
+    # Process the blend file
+    process(blend_file)
+
+# ✅ GOOD - No comment needed, code is clear
+for blend_file in blend_files:
+    process(blend_file)
+
+# ✅ ALSO GOOD - Comment explains why (non-obvious constraint)
+# Skip generated/packed images to avoid rebasing internal Blender data
+for image in images:
+    if not image.filepath or image.packed_file:
+        continue
+    rebase_path(image.filepath)
+```
+
+**PROACTIVE CLEANUP:**
+- **Remove unnecessary comments when you see them** during code work
+- Treat comment cleanup as part of routine maintenance
+- If editing a file with obvious comments (like `# Loop through files`), remove them
+- Don't make separate commits just for comment removal - include in your current work
+- Exception: Don't remove comments from code you're not already modifying unless doing a dedicated cleanup
+
+**Example during regular work:**
+```python
+# You're editing this function to add a new parameter
+def process_files(file_list, new_param):
+    # Loop through all files  ← REMOVE: obvious
+    for file in file_list:
+        # Process each file  ← REMOVE: obvious
+        process(file)
+
+    # Return success  ← REMOVE: obvious
+    return True
+
+# Should become:
+def process_files(file_list, new_param):
+    for file in file_list:
+        process(file)
+    return True
+```
 
 ## Common Refactoring Patterns
 
@@ -214,6 +302,35 @@ blender_project_manager/
 3. Add clear docstring
 4. Replace all occurrences with method call
 
+## Performance Optimization Patterns
+
+### Avoid Blender When Possible
+
+**Rule**: Opening Blender files is slow (20+ seconds). Always check if you can avoid it.
+
+**Pattern: Same-Directory Rename Optimization**
+```python
+# ❌ BAD - Always opens file in Blender
+def rename_file(old_path, new_path):
+    blender_runner.run_script(...)  # 20 seconds
+
+# ✅ GOOD - Fast path for same-directory renames
+def rename_file(old_path, new_path):
+    if old_path.parent == new_path.parent:
+        # Simple filesystem rename - relative paths don't need rebasing
+        shutil.move(old_path, new_path)  # < 1 second
+    else:
+        # Different directories - need Blender to rebase paths
+        blender_runner.run_script(...)  # 20 seconds
+```
+
+**Why this works**: When renaming `model.blend` → `character.blend` in the same directory, relative paths like `//textures/albedo.png` still point to the same location.
+
+**When to apply**:
+- File/directory renames in same location
+- Operations that don't affect relative path resolution
+- Any filesystem operation that Blender isn't needed for
+
 ## Pre-Commit Checklist
 
 Before committing code, verify:
@@ -225,8 +342,9 @@ Before committing code, verify:
 - [ ] Consistent error handling with proper cleanup
 - [ ] Tests added/updated for new functionality
 - [ ] Docstrings added for public methods
-- [ ] No unnecessary comments
+- [ ] No unnecessary comments (only comment the WHY, not the WHAT)
 - [ ] Code follows existing patterns in the module
+- [ ] Performance: Avoid opening Blender when possible
 
 ## When in Doubt
 
@@ -234,3 +352,4 @@ Before committing code, verify:
 2. **Prefer simplicity** - Don't over-engineer
 3. **Ask "Is this maintainable?"** - Will another developer understand this in 6 months?
 4. **Extract, don't duplicate** - If you're copying code, extract it instead
+5. **Clean as you go** - Remove unnecessary comments when editing files
