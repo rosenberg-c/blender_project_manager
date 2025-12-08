@@ -125,14 +125,17 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
     lib_abs = os.path.abspath(lib_path)
 
     # Find all .blend files in project
+    print(f"LOG: Scanning for .blend files in project...", flush=True)
     all_blend_files = [str(f) for f in find_blend_files(Path(root_dir))]
+    print(f"LOG: Found {len(all_blend_files)} .blend files to check", flush=True)
 
-    for blend_file in all_blend_files:
+    for i, blend_file in enumerate(all_blend_files, 1):
         # Skip the library file itself
         if os.path.abspath(blend_file) == lib_abs:
             continue
 
         # Open the file
+        print(f"LOG: Checking file {i}/{len(all_blend_files)}: {Path(blend_file).name}", flush=True)
         try:
             bpy.ops.wm.open_mainfile(filepath=blend_file)
         except Exception as e:
@@ -149,6 +152,8 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
 
         if not matching_libs:
             continue  # This file doesn't use our library
+
+        print(f"LOG: Found linked references in {Path(blend_file).name}", flush=True)
 
         # Process each renamed item
         for item in renamed_items:
@@ -214,6 +219,7 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
         if file_changed:
             result["updated_files"].append(blend_file)
             if not dry_run:
+                print(f"LOG: Saving changes to {Path(blend_file).name}", flush=True)
                 try:
                     bpy.ops.wm.save_mainfile()
                 except Exception as e:
@@ -237,6 +243,7 @@ if __name__ == "__main__":
         args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
 
         # Load the blend file
+        print(f"LOG: Loading file: {Path(args.blend_file).name}", flush=True)
         bpy.ops.wm.open_mainfile(filepath=args.blend_file)
 
         # Parse item names
@@ -244,6 +251,7 @@ if __name__ == "__main__":
 
         # Perform local rename
         dry_run = args.dry_run == 'true'
+        print(f"LOG: Renaming {len(item_names)} item(s) in current file", flush=True)
         result = rename_local_items(item_names, args.find, args.replace, dry_run)
 
         # Save library file if not dry run and changes were made

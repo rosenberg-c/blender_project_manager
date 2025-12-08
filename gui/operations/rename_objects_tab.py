@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.operations.base_tab import BaseOperationTab
+from gui.progress_dialog import OperationProgressDialog
 from gui.ui_strings import (
     TITLE_NO_FILE, TITLE_NO_SELECTION, TITLE_MISSING_INPUT, TITLE_NO_ITEMS, TITLE_CONFIRM_RENAME,
     MSG_SELECT_BLEND_FILE, MSG_SELECT_ITEMS_TO_RENAME, MSG_ENTER_FIND_TEXT, MSG_NO_VALID_ITEMS,
@@ -330,12 +331,16 @@ class RenameObjectsTab(BaseOperationTab):
             self.show_warning(TITLE_NO_ITEMS, MSG_NO_VALID_ITEMS)
             return
 
-        # Execute with loading state
-        btn = self.obj_preview_btn if dry_run else self.obj_execute_btn
-        loading_text = BTN_PROCESSING if dry_run else BTN_EXECUTING
+        # For preview, use loading state; for execute, use progress dialog
+        if dry_run:
+            self._run_rename_with_loading_state(item_names, find_text, replace_text, dry_run)
+        else:
+            self._run_rename_with_progress_dialog(item_names, find_text, replace_text)
 
+    def _run_rename_with_loading_state(self, item_names, find_text, replace_text, dry_run):
+        """Run rename operation with simple loading state (for preview)."""
         try:
-            with self.loading_state(btn, loading_text):
+            with self.loading_state(self.obj_preview_btn, BTN_PROCESSING):
                 runner = self.get_blender_runner()
                 script_path = Path(__file__).parent.parent.parent / "blender_lib" / "rename_objects.py"
 
@@ -351,7 +356,7 @@ class RenameObjectsTab(BaseOperationTab):
                         "item-names": ",".join(item_names),
                         "find": find_text,
                         "replace": replace_text,
-                        "dry-run": "true" if dry_run else "false"
+                        "dry-run": "true"
                     },
                     timeout=TIMEOUT_MEDIUM
                 )
@@ -367,6 +372,77 @@ class RenameObjectsTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error("Rename Error", f"Failed to rename items:\n\n{str(e)}")
+
+    def _run_rename_with_progress_dialog(self, item_names, find_text, replace_text):
+        """Run rename operation with progress dialog (for execution)."""
+        from PySide6.QtWidgets import QApplication
+
+        # Disable buttons
+        self.obj_execute_btn.setText(BTN_EXECUTING)
+        self.obj_execute_btn.setEnabled(False)
+        self.obj_preview_btn.setEnabled(False)
+        self.obj_load_btn.setEnabled(False)
+        QApplication.processEvents()
+
+        # Create and show progress dialog
+        progress_dialog = OperationProgressDialog(f"Renaming Objects/Collections", self)
+        progress_dialog.show()
+        QApplication.processEvents()
+
+        try:
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "rename_objects.py"
+
+            # Get project root
+            project_root = self.get_project_root()
+
+            # Define progress callback
+            def on_output_line(line: str):
+                """Process each line of output from Blender script."""
+                # Look for LOG: prefix
+                if line.startswith("LOG: "):
+                    message = line[5:]  # Remove "LOG: " prefix
+                    progress_dialog.log_text.append(message)
+                    QApplication.processEvents()
+
+            # Run the script with progress
+            result = runner.run_script_with_progress(
+                script_path,
+                {
+                    "blend-file": str(self.current_file),
+                    "project-root": str(project_root),
+                    "item-names": ",".join(item_names),
+                    "find": find_text,
+                    "replace": replace_text,
+                    "dry-run": "false"
+                },
+                progress_callback=on_output_line,
+                timeout=TIMEOUT_MEDIUM
+            )
+
+            # Parse JSON output
+            data = extract_json_from_output(result.stdout)
+
+            if "error" in data and data["error"]:
+                raise Exception(data["error"])
+
+            # Mark complete
+            progress_dialog.update_progress(100, "Rename complete!")
+            progress_dialog.exec()
+
+            # Show results
+            self._show_rename_results(data, dry_run=False)
+
+        except Exception as e:
+            progress_dialog.mark_error(str(e))
+            progress_dialog.exec()
+            self.show_error("Rename Error", f"Failed to rename items:\n\n{str(e)}")
+        finally:
+            # Restore buttons
+            self.obj_execute_btn.setText("Execute Rename")
+            self.obj_execute_btn.setEnabled(True)
+            self.obj_preview_btn.setEnabled(True)
+            self.obj_load_btn.setEnabled(True)
 
     def _show_rename_results(self, data: dict, dry_run: bool):
         """Show results of rename operation.
