@@ -132,7 +132,7 @@ class FileItemDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.icon_size = 16
         self.icon_margin = 4
-        self.icon_spacing = 2
+        self.icon_spacing = 4
         self.proxy_model = proxy_model
         self.file_system_model = file_system_model
         self.browser_widget = browser_widget
