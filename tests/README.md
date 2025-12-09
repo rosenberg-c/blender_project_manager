@@ -193,7 +193,7 @@ export PATH="/Applications/Blender.app/Contents/MacOS:$PATH"
 ### "Module not found"
 Ensure you're running pytest from the project root:
 ```bash
-cd /Users/christian/blender_project_manager
+cd blender_project_manager
 pytest
 ```
 
