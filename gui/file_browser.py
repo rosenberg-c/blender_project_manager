@@ -392,6 +392,11 @@ class FileBrowserWidget(QWidget):
         self.tree.hideColumn(2)
         self.tree.hideColumn(3)
 
+        # Center the header text both horizontally and vertically
+        header = self.tree.header()
+        header.setDefaultAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+        header.setFixedHeight(24)  # Make header thinner
+
         # Enable sorting
         self.tree.setSortingEnabled(True)
 
