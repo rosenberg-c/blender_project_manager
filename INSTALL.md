@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- Python 3.10 or later
-- Blender installed (tested with Blender 3.x and 4.x)
+- Python 3.13 (not above)
+- Blender 5.0 installed (tested with Blender 5.0, compatibility with earlier versions not guaranteed)
 - pip (Python package manager)
 
 ## Installation Steps
@@ -12,29 +12,64 @@
 
 Using a virtual environment keeps dependencies isolated and prevents conflicts with other Python projects.
 
+**Important:** This project requires Python 3.13 specifically. If you have multiple Python versions installed, you need to create the virtual environment with Python 3.13 explicitly.
+
+#### Using a Specific Python Version
+
 **macOS/Linux:**
 ```bash
 cd blender_project_manager
 
-# Create virtual environment
-python3 -m venv venv
+# Create virtual environment with Python 3.13 specifically
+python3.13 -m venv venv
 
 # Activate virtual environment
+source venv/bin/activate
+
+# Verify Python version
+python --version  # Should show Python 3.13.x
+```
+
+If `python3.13` is not found, you may need to install Python 3.13 first:
+- **macOS**: Use Homebrew: `brew install python@3.13`
+- **Linux**: Use your package manager, e.g., `sudo apt install python3.13 python3.13-venv`
+
+**Windows:**
+```bash
+cd blender_project_manager
+
+# If you have Python 3.13 in PATH as 'python':
+python -m venv venv
+
+# Or specify the full path to Python 3.13:
+C:\Users\YourName\AppData\Local\Programs\Python\Python313\python.exe -m venv venv
+
+# Activate virtual environment
+venv\Scripts\activate
+
+# Verify Python version
+python --version  # Should show Python 3.13.x
+```
+
+You should see `(venv)` appear in your terminal prompt when activated.
+
+#### Default Method (if Python 3.13 is your default)
+
+If Python 3.13 is already your default Python version:
+
+**macOS/Linux:**
+```bash
+cd blender_project_manager
+python3 -m venv venv
 source venv/bin/activate
 ```
 
 **Windows:**
 ```bash
 cd blender_project_manager
-
-# Create virtual environment
 python -m venv venv
-
-# Activate virtual environment
 venv\Scripts\activate
 ```
-
-You should see `(venv)` appear in your terminal prompt when activated.
 
 ### 2. Install Dependencies
 
@@ -67,7 +102,7 @@ pip install PySide6
 The application expects Blender to be installed at:
 
 - **macOS**: `/Applications/Blender.app/Contents/MacOS/Blender`
-- **Windows**: `C:/Program Files/Blender Foundation/Blender 4.0/blender.exe`
+- **Windows**: `C:/Program Files/Blender Foundation/Blender 5.0/blender.exe`
 - **Linux**: `/usr/bin/blender`
 
 If your Blender is installed elsewhere, you can update the path in:
