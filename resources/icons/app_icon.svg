@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
   <!-- Background rounded square -->
-  <rect x="10" y="10" width="236" height="236" rx="40" ry="40" fill="#3B82F6" stroke="#2563EB" stroke-width="3"/>
+  <rect x="10" y="10" width="236" height="236" rx="40" ry="40" fill="#5B7C99" stroke="#4A6B85" stroke-width="3"/>
 
   <!-- Folder base -->
   <path d="M 40 70 L 40 190 C 40 198 46 204 54 204 L 202 204 C 210 204 216 198 216 190 L 216 90 C 216 82 210 76 202 76 L 140 76 L 120 56 C 118 54 115 52 112 52 L 54 52 C 46 52 40 58 40 66 Z"
-        fill="#4A5568"
-        stroke="#2D3748"
+        fill="#F59E52"
+        stroke="#D97F3D"
         stroke-width="3"/>
 
   <!-- Folder tab -->
   <path d="M 40 70 L 40 66 C 40 58 46 52 54 52 L 112 52 C 115 52 118 54 120 56 L 140 76 L 216 76 L 216 90 L 40 90 Z"
-        fill="#5A6C7D"
-        stroke="#2D3748"
+        fill="#FFB570"
+        stroke="#D97F3D"
         stroke-width="3"/>
 
   <!-- File/document icons inside folder -->
