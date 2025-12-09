@@ -199,6 +199,13 @@ class LinkObjectsTab(BaseOperationTab):
 
         tab_layout.addLayout(collection_layout)
 
+        # Add .link suffix option
+        self.link_add_suffix_checkbox = QCheckBox("Add '.link' suffix to collection name")
+        self.link_add_suffix_checkbox.setToolTip("Appends '.link' to the target collection name (e.g., 'MyCollection.link')")
+        self.link_add_suffix_checkbox.setChecked(False)
+        self.link_add_suffix_checkbox.stateChanged.connect(self._save_link_state)
+        tab_layout.addWidget(self.link_add_suffix_checkbox)
+
         # Buttons
         btn_row = QHBoxLayout()
 
@@ -509,6 +516,11 @@ class LinkObjectsTab(BaseOperationTab):
             self.show_warning(TITLE_NO_COLLECTION, MSG_ENTER_COLLECTION_NAME)
             return
 
+        # Add .link suffix if checkbox is checked
+        if self.link_add_suffix_checkbox.isChecked():
+            if not target_collection.endswith('.link'):
+                target_collection = target_collection + '.link'
+
         # Extract item names and types
         item_names = []
         item_types = []
@@ -644,6 +656,9 @@ class LinkObjectsTab(BaseOperationTab):
             if self.link_collection_input.text():
                 link_state['last_target_collection'] = self.link_collection_input.text()
 
+            # Save add suffix checkbox state
+            link_state['add_link_suffix'] = self.link_add_suffix_checkbox.isChecked()
+
             config_data['link_operation'] = link_state
 
             # Write back to file
@@ -702,6 +717,10 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore last target collection
             last_collection = link_state.get('last_target_collection', '')
             self.link_collection_input.setText(last_collection)
+
+            # Restore add suffix checkbox state
+            add_suffix = link_state.get('add_link_suffix', False)
+            self.link_add_suffix_checkbox.setChecked(add_suffix)
 
         except Exception as e:
             print(f"Warning: Could not restore link operation state: {e}")
