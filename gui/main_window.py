@@ -75,7 +75,6 @@ class MainWindow(QMainWindow):
         self.operations_panel = OperationsPanelWidget(self.file_ops_controller, self.config_file)
         self.splitter.addWidget(self.operations_panel)
 
-        # Set initial sizes (2:1 ratio)
         self.splitter.setStretchFactor(0, 2)
         self.splitter.setStretchFactor(1, 1)
 
