@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QFileDialog, QMessageBox, QStatusBar,
@@ -30,6 +31,11 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Blender Project Manager")
         self.resize(1400, 800)
+
+        # Set application icon
+        icon_path = Path(__file__).parent.parent / 'resources' / 'icons' / 'app_icon.svg'
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         # Config file for storing last project path
         self.config_dir = Path.home() / '.blender_project_manager'
