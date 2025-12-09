@@ -346,7 +346,11 @@ class FileBrowserWidget(QWidget):
         self.search_box.textChanged.connect(self._on_search_text_changed)
         search_layout.addWidget(self.search_box)
 
-        # Collapse/Expand buttons
+        self.clear_search_btn = QPushButton("Clear")
+        self.clear_search_btn.clicked.connect(self._clear_search)
+        self.clear_search_btn.setEnabled(False)
+        search_layout.addWidget(self.clear_search_btn)
+
         self.collapse_all_btn = QPushButton("Collapse All")
         self.collapse_all_btn.clicked.connect(self.collapse_all)
         search_layout.addWidget(self.collapse_all_btn)
@@ -454,16 +458,18 @@ class FileBrowserWidget(QWidget):
         Args:
             text: Search text entered by user
         """
-        # Update the proxy model filter
         self.proxy_model.set_search_text(text)
+        self.clear_search_btn.setEnabled(bool(text))
 
         if text:
-            # Expand all to show filtered results
             self.tree.expandAll()
         else:
-            # Clear search - collapse all and expand to depth 1
             self.tree.collapseAll()
             self.tree.expandToDepth(1)
+
+    def _clear_search(self):
+        """Clear the search box."""
+        self.search_box.clear()
 
     def _on_item_clicked(self, index):
         """Handle file or directory selection.

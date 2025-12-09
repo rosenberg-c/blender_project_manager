@@ -45,3 +45,13 @@ cache/
 
 # Logs
 *.log
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# User data
+*.blend
+*.blend1
+test_projects/
