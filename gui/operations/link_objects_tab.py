@@ -141,6 +141,7 @@ class LinkObjectsTab(BaseOperationTab):
 
         self.link_items_list = QListWidget()
         self.link_items_list.setSelectionMode(QListWidget.ExtendedSelection)
+        self.link_items_list.itemSelectionChanged.connect(self._on_link_item_selection_changed)
         tab_layout.addWidget(self.link_items_list)
 
         tab_layout.addSpacing(5)
@@ -171,9 +172,20 @@ class LinkObjectsTab(BaseOperationTab):
         self.collection_label = QLabel("Target collection name:")
         tab_layout.addWidget(self.collection_label)
 
+        collection_layout = QHBoxLayout()
+
         self.link_collection_input = QLineEdit()
         self.link_collection_input.setPlaceholderText("Collection to place linked items (created if needed)")
-        tab_layout.addWidget(self.link_collection_input)
+        collection_layout.addWidget(self.link_collection_input)
+
+        # Copy button
+        self.link_copy_name_btn = QPushButton("Copy Name")
+        self.link_copy_name_btn.setEnabled(False)
+        self.link_copy_name_btn.setToolTip("Copy selected item name to target collection field")
+        self.link_copy_name_btn.clicked.connect(self._copy_item_name_to_collection)
+        collection_layout.addWidget(self.link_copy_name_btn)
+
+        tab_layout.addLayout(collection_layout)
 
         # Buttons
         btn_row = QHBoxLayout()
@@ -727,3 +739,19 @@ class LinkObjectsTab(BaseOperationTab):
             locked_file = self.pending_locked_file_restore['locked_file']
             locked_scene = self.pending_locked_file_restore['locked_scene']
             self._apply_locked_file_restoration(locked_file, locked_scene)
+
+    def _on_link_item_selection_changed(self):
+        """Handle item selection change in link items list."""
+        selected_items = self.link_items_list.selectedItems()
+        # Enable copy button only if exactly one item is selected
+        self.link_copy_name_btn.setEnabled(len(selected_items) == 1)
+
+    def _copy_item_name_to_collection(self):
+        """Copy the selected item name to the target collection field."""
+        selected_items = self.link_items_list.selectedItems()
+        if len(selected_items) == 1:
+            item_data = selected_items[0].data(Qt.UserRole)
+            if item_data and "data" in item_data:
+                item_name = item_data["data"].get("name", "")
+                if item_name:
+                    self.link_collection_input.setText(item_name)
