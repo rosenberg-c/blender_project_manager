@@ -37,8 +37,8 @@ class OperationsPanelWidget(QWidget):
     def setup_ui(self):
         """Create UI layout."""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 0, 0, 0)
 
-        # Title
         title = QLabel("<h2>File Operations</h2>")
         layout.addWidget(title)
 
