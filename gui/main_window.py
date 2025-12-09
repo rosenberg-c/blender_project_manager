@@ -64,15 +64,14 @@ class MainWindow(QMainWindow):
         project_bar = self.create_project_selector_bar()
         main_layout.addWidget(project_bar)
 
-        # Create horizontal splitter for file browser and operations panel
         self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setHandleWidth(0)
+        self.splitter.setStyleSheet("QSplitter::handle { background: transparent; width: 0px; }")
 
-        # Left: File browser
         self.file_browser = FileBrowserWidget(self.project_controller, self.config_file)
         self.file_browser.file_selected.connect(self._on_file_selected)
         self.splitter.addWidget(self.file_browser)
 
-        # Right: Operations panel
         self.operations_panel = OperationsPanelWidget(self.file_ops_controller, self.config_file)
         self.splitter.addWidget(self.operations_panel)
 
