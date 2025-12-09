@@ -85,10 +85,19 @@ class TestFixCollectionNames:
         mock_parent = MagicMock()
         mock_child1 = MagicMock()
         mock_child1.name = "Tree"
-        mock_parent.children = [mock_child1]
 
-        mock_bpy.data.collections = [mock_parent]
-        mock_bpy.data.collections.get = MagicMock(return_value=mock_old_collection)
+        # Mock children as a container with link/unlink methods
+        mock_children = MagicMock()
+        mock_children.__iter__ = lambda self: iter([mock_child1])
+        mock_children.link = MagicMock()
+        mock_children.unlink = MagicMock()
+        mock_parent.children = mock_children
+
+        # Create a mock collections container that is both iterable and has .get
+        mock_collections_container = MagicMock()
+        mock_collections_container.__iter__ = lambda self: iter([mock_parent])
+
+        mock_bpy.data.collections = mock_collections_container
 
         # Mock new collection
         mock_new_collection = MagicMock()
@@ -112,7 +121,7 @@ class TestFixCollectionNames:
                 return mock_new_collection
             return None
 
-        mock_bpy.data.collections.get = MagicMock(side_effect=get_side_effect)
+        mock_collections_container.get = MagicMock(side_effect=get_side_effect)
         mock_bpy.data.collections.remove = MagicMock()
         mock_bpy.path.abspath = lambda p: str(tmp_path / "assets.blend")
 
@@ -132,8 +141,8 @@ class TestFixCollectionNames:
             assert result["mode"] == "individual"
 
             # Parent should have link/unlink called
-            assert mock_parent.children.link.called
-            assert mock_parent.children.unlink.called
+            assert mock_children.link.called
+            assert mock_children.unlink.called
 
     def test_remap_handles_missing_instance_object(self, tmp_path):
         """Test remapping fails gracefully when instance object not found."""

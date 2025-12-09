@@ -131,6 +131,7 @@ class TestValidateCollectionNames:
         mock_empty.instance_collection = mock_collection
 
         mock_bpy.data.objects = [mock_empty]
+        mock_bpy.data.collections.get = MagicMock(return_value=mock_collection)
 
         with patch.dict('sys.modules', {'bpy': mock_bpy}):
             from validate_collection_names import detect_link_mode
@@ -150,7 +151,11 @@ class TestValidateCollectionNames:
         # No Empty objects with collection instance
         mock_bpy = MagicMock()
         mock_library = MagicMock()
+        mock_collection = MagicMock()
+        mock_collection.name = "Tree"
+
         mock_bpy.data.objects = []
+        mock_bpy.data.collections.get = MagicMock(return_value=mock_collection)
 
         with patch.dict('sys.modules', {'bpy': mock_bpy}):
             from validate_collection_names import detect_link_mode
@@ -186,8 +191,17 @@ class TestValidateCollectionNames:
         mock_collection.name = "Tree"
         mock_collection.library = mock_library
 
-        mock_bpy.data.libraries = [mock_library]
-        mock_bpy.data.collections = [mock_collection]
+        # Create a mock libraries container that is both iterable and has .load
+        mock_libraries_container = MagicMock()
+        mock_libraries_container.__iter__ = lambda self: iter([mock_library])
+
+        # Create a mock collections container that is both iterable and has .get
+        mock_collections_container = MagicMock()
+        mock_collections_container.__iter__ = lambda self: iter([mock_collection])
+        mock_collections_container.get = MagicMock(return_value=mock_collection)
+
+        mock_bpy.data.libraries = mock_libraries_container
+        mock_bpy.data.collections = mock_collections_container
         mock_bpy.data.objects = []
 
         # Mock library loading to return different collection names
@@ -199,7 +213,7 @@ class TestValidateCollectionNames:
         mock_context.__enter__ = MagicMock(return_value=(mock_data_from, mock_data_to))
         mock_context.__exit__ = MagicMock(return_value=False)
 
-        mock_bpy.data.libraries.load = MagicMock(return_value=mock_context)
+        mock_libraries_container.load = MagicMock(return_value=mock_context)
 
         with patch.dict('sys.modules', {'bpy': mock_bpy}):
             # Need to mock os.path.exists as well
@@ -245,8 +259,17 @@ class TestValidateCollectionNames:
         mock_collection.name = "Tree"
         mock_collection.library = mock_library
 
-        mock_bpy.data.libraries = [mock_library]
-        mock_bpy.data.collections = [mock_collection]
+        # Create a mock libraries container that is both iterable and has .load
+        mock_libraries_container = MagicMock()
+        mock_libraries_container.__iter__ = lambda self: iter([mock_library])
+
+        # Create a mock collections container that is both iterable and has .get
+        mock_collections_container = MagicMock()
+        mock_collections_container.__iter__ = lambda self: iter([mock_collection])
+        mock_collections_container.get = MagicMock(return_value=mock_collection)
+
+        mock_bpy.data.libraries = mock_libraries_container
+        mock_bpy.data.collections = mock_collections_container
         mock_bpy.data.objects = []
 
         # Mock library loading - Tree exists
@@ -258,7 +281,7 @@ class TestValidateCollectionNames:
         mock_context.__enter__ = MagicMock(return_value=(mock_data_from, mock_data_to))
         mock_context.__exit__ = MagicMock(return_value=False)
 
-        mock_bpy.data.libraries.load = MagicMock(return_value=mock_context)
+        mock_libraries_container.load = MagicMock(return_value=mock_context)
 
         with patch.dict('sys.modules', {'bpy': mock_bpy}):
             with patch('os.path.exists', return_value=True):
