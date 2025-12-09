@@ -54,6 +54,18 @@ class RenameObjectsTab(BaseOperationTab):
 
         tab_layout.addSpacing(5)
 
+        # Scene selector
+        scene_layout = QHBoxLayout()
+        scene_label = QLabel("Scene:")
+        scene_layout.addWidget(scene_label)
+
+        self.obj_scene_combo = QComboBox()
+        self.obj_scene_combo.setEnabled(False)
+        scene_layout.addWidget(self.obj_scene_combo)
+
+        scene_layout.addStretch()
+        tab_layout.addLayout(scene_layout)
+
         # Type filter
         filter_layout = QHBoxLayout()
         filter_label = QLabel("Show:")
@@ -151,15 +163,43 @@ class RenameObjectsTab(BaseOperationTab):
 
         # Update Rename Objects tab (only for .blend files)
         if self.is_blend_file(file_path):
+            self._load_scenes_for_rename()
             self.obj_load_btn.setEnabled(True)
             self.obj_list.clear()
             self.obj_list_data = {"objects": [], "collections": [], "materials": []}
         else:
+            self.obj_scene_combo.clear()
+            self.obj_scene_combo.setEnabled(False)
             self.obj_load_btn.setEnabled(False)
             self.obj_preview_btn.setEnabled(False)
             self.obj_execute_btn.setEnabled(False)
             self.obj_list.clear()
             self.obj_list_data = {"objects": [], "collections": [], "materials": []}
+
+    def _load_scenes_for_rename(self):
+        """Load scenes from the .blend file."""
+        if not self.current_file or self.current_file.suffix != '.blend':
+            return
+
+        try:
+            # Get scenes from Blender service
+            blender_service = self.controller.project.blender_service
+            scenes = blender_service.get_scenes(self.current_file)
+
+            self.obj_scene_combo.clear()
+            self.obj_scene_combo.addItem("All")  # Add "All" option first
+
+            # Populate dropdown with scene names
+            for scene in scenes:
+                self.obj_scene_combo.addItem(scene["name"])
+
+            if scenes:
+                self.obj_scene_combo.setEnabled(True)
+
+        except Exception as e:
+            self.show_warning("Load Scenes Error", f"Failed to load scenes:\n\n{str(e)}")
+            self.obj_scene_combo.clear()
+            self.obj_scene_combo.setEnabled(False)
 
     def _load_objects(self):
         """Load objects and collections from the selected .blend file."""
@@ -176,10 +216,18 @@ class RenameObjectsTab(BaseOperationTab):
                 if not script_path.exists():
                     raise Exception(f"Script not found: {script_path}")
 
+                # Get selected scene
+                scene_name = self.obj_scene_combo.currentText()
+                script_args = {"blend-file": str(self.current_file)}
+
+                # Add scene parameter if not "All"
+                if scene_name and scene_name != "All":
+                    script_args["scene"] = scene_name
+
                 # Run the script with blend file as argument
                 result = runner.run_script(
                     script_path,
-                    {"blend-file": str(self.current_file)},
+                    script_args,
                     timeout=TIMEOUT_SHORT
                 )
 

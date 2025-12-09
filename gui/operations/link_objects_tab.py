@@ -116,6 +116,18 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_source_display.setStyleSheet(Theme.get_file_display_style())
         tab_layout.addWidget(self.link_source_display)
 
+        # Source scene selector
+        source_scene_layout = QHBoxLayout()
+        source_scene_label = QLabel("Scene:")
+        source_scene_layout.addWidget(source_scene_label)
+
+        self.link_source_scene_combo = QComboBox()
+        self.link_source_scene_combo.setEnabled(False)
+        source_scene_layout.addWidget(self.link_source_scene_combo)
+
+        source_scene_layout.addStretch()
+        tab_layout.addLayout(source_scene_layout)
+
         # Type filter
         filter_layout = QHBoxLayout()
         filter_label = QLabel("Show:")
@@ -231,6 +243,7 @@ class LinkObjectsTab(BaseOperationTab):
             if is_blend:
                 self.link_source_file = file_path
                 self.link_source_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
+                self._load_scenes_for_link_source()
                 self.link_load_btn.setEnabled(True)
                 # Clear previous items when source changes
                 self.link_items_list.clear()
@@ -239,6 +252,8 @@ class LinkObjectsTab(BaseOperationTab):
                 # Non-.blend file selected, clear source
                 self.link_source_file = None
                 self.link_source_display.setText(LABEL_SELECT_BLEND_IN_BROWSER)
+                self.link_source_scene_combo.clear()
+                self.link_source_scene_combo.setEnabled(False)
                 self.link_load_btn.setEnabled(False)
                 self.link_items_list.clear()
                 self.link_source_data = {"objects": [], "collections": []}
@@ -329,6 +344,31 @@ class LinkObjectsTab(BaseOperationTab):
         # Save lock state
         self._save_link_state()
 
+    def _load_scenes_for_link_source(self):
+        """Load scenes from the source .blend file."""
+        if not self.link_source_file or self.link_source_file.suffix != '.blend':
+            return
+
+        try:
+            # Get scenes from Blender service
+            blender_service = self.controller.project.blender_service
+            scenes = blender_service.get_scenes(self.link_source_file)
+
+            self.link_source_scene_combo.clear()
+            self.link_source_scene_combo.addItem("All")  # Add "All" option first
+
+            # Populate dropdown with scene names
+            for scene in scenes:
+                self.link_source_scene_combo.addItem(scene["name"])
+
+            if scenes:
+                self.link_source_scene_combo.setEnabled(True)
+
+        except Exception as e:
+            self.show_warning("Load Scenes Error", f"Failed to load scenes:\n\n{str(e)}")
+            self.link_source_scene_combo.clear()
+            self.link_source_scene_combo.setEnabled(False)
+
     def _load_link_source(self):
         """Load objects and collections from the source .blend file."""
         if not self.link_source_file:
@@ -345,9 +385,17 @@ class LinkObjectsTab(BaseOperationTab):
                 runner = self.get_blender_runner()
                 script_path = Path(__file__).parent.parent.parent / "blender_lib" / "list_objects.py"
 
+                # Get selected scene
+                scene_name = self.link_source_scene_combo.currentText()
+                script_args = {"blend-file": str(self.link_source_file)}
+
+                # Add scene parameter if not "All"
+                if scene_name and scene_name != "All":
+                    script_args["scene"] = scene_name
+
                 result = runner.run_script(
                     script_path,
-                    {"blend-file": str(self.link_source_file)},
+                    script_args,
                     timeout=TIMEOUT_SHORT
                 )
 
