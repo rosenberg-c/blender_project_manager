@@ -173,66 +173,72 @@ def remap_linked_references(lib_path, renamed_items, root_dir, dry_run=True):
 
         print(f"LOG: Found linked references in {Path(blend_file).name}", flush=True)
 
-        # Process each renamed item
         for item in renamed_items:
             id_type = item["type"]
             old_name = item["old_name"]
             new_name = item["new_name"]
 
             for lib in matching_libs:
-                # Find old linked IDs
                 if id_type == "object":
                     old_ids = [obj for obj in bpy.data.objects
                               if obj.library is lib and obj.name == old_name]
-                else:  # collection
+                elif id_type == "collection":
                     old_ids = [col for col in bpy.data.collections
                               if col.library is lib and col.name == old_name]
+                elif id_type == "material":
+                    old_ids = [mat for mat in bpy.data.materials
+                              if mat.library is lib and mat.name == old_name]
+                else:
+                    continue
 
                 if not old_ids:
                     continue
 
-                # Mark that this file will change
                 file_changed = True
 
-                # In dry-run mode, don't actually try to link and remap
                 if dry_run:
                     continue
 
-                # Execute mode: actually perform the remap
-                # Link the new ID from library
                 try:
                     with bpy.data.libraries.load(lib_abs, link=True) as (data_from, data_to):
                         if id_type == "object":
                             if new_name in data_from.objects:
                                 data_to.objects = [new_name]
-                        else:  # collection
+                        elif id_type == "collection":
                             if new_name in data_from.collections:
                                 data_to.collections = [new_name]
+                        elif id_type == "material":
+                            if new_name in data_from.materials:
+                                data_to.materials = [new_name]
                 except Exception as e:
                     result["warnings"].append(f"Could not link {new_name} from library: {e}")
                     continue
 
-                # Find the newly linked ID
                 if id_type == "object":
                     new_id = next((obj for obj in bpy.data.objects
                                   if obj.name == new_name and obj.library is lib), None)
-                else:
+                elif id_type == "collection":
                     new_id = next((col for col in bpy.data.collections
                                   if col.name == new_name and col.library is lib), None)
+                elif id_type == "material":
+                    new_id = next((mat for mat in bpy.data.materials
+                                  if mat.name == new_name and mat.library is lib), None)
+                else:
+                    new_id = None
 
                 if new_id is None:
                     result["warnings"].append(f"Could not find newly linked {id_type} '{new_name}'")
                     continue
 
-                # Remap old IDs to new ID
                 for old_id in old_ids:
                     old_id.user_remap(new_id)
 
-                    # Remove old ID
                     if id_type == "object":
                         bpy.data.objects.remove(old_id)
-                    else:
+                    elif id_type == "collection":
                         bpy.data.collections.remove(old_id)
+                    elif id_type == "material":
+                        bpy.data.materials.remove(old_id)
 
         if file_changed:
             result["updated_files"].append(blend_file)
