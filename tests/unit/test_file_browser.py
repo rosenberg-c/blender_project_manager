@@ -120,13 +120,16 @@ class TestFileBrowserDelete:
         # Mock selection
         browser.get_selected_path = MagicMock(return_value=test_file)
 
-        # Mock confirmation dialog to return Yes
+        # Mock confirmation dialog to return Yes and mock send2trash
         with patch('gui.file_browser.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
-            with patch('gui.file_browser.QMessageBox.information'):
-                browser._delete_selected()
+            with patch('gui.file_browser.QMessageBox.information') as mock_info:
+                with patch('gui.file_browser.send2trash') as mock_trash:
+                    browser._delete_selected()
 
-        # Verify file was deleted
-        assert not test_file.exists()
+                    # Verify send2trash was called
+                    mock_trash.assert_called_once_with(str(test_file))
+                    # Verify success dialog was shown
+                    assert mock_info.called
 
     def test_delete_directory_with_confirmation(self, qapp, tmp_path):
         """Test that deleting a directory shows confirmation and deletes."""
@@ -148,13 +151,16 @@ class TestFileBrowserDelete:
         # Mock selection
         browser.get_selected_path = MagicMock(return_value=test_dir)
 
-        # Mock confirmation dialog to return Yes
+        # Mock confirmation dialog to return Yes and mock send2trash
         with patch('gui.file_browser.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
-            with patch('gui.file_browser.QMessageBox.information'):
-                browser._delete_selected()
+            with patch('gui.file_browser.QMessageBox.information') as mock_info:
+                with patch('gui.file_browser.send2trash') as mock_trash:
+                    browser._delete_selected()
 
-        # Verify directory was deleted
-        assert not test_dir.exists()
+                    # Verify send2trash was called
+                    mock_trash.assert_called_once_with(str(test_dir))
+                    # Verify success dialog was shown
+                    assert mock_info.called
 
     def test_delete_cancelled(self, qapp, tmp_path):
         """Test that canceling deletion does not delete."""
@@ -250,20 +256,16 @@ class TestFileBrowserDelete:
 
         browser = FileBrowserWidget(mock_controller)
 
-        # Mock selection - create a mock Path that raises PermissionError on unlink
-        mock_path = MagicMock(spec=Path)
-        mock_path.is_dir.return_value = False
-        mock_path.__str__.return_value = str(test_file)
-        mock_path.unlink.side_effect = PermissionError("Permission denied")
+        # Mock selection
+        browser.get_selected_path = MagicMock(return_value=test_file)
 
-        browser.get_selected_path = MagicMock(return_value=mock_path)
-
-        # Mock confirmation and error dialogs
+        # Mock confirmation and error dialogs, make send2trash raise PermissionError
         with patch('gui.file_browser.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
             with patch('gui.file_browser.QMessageBox.critical') as mock_error:
-                browser._delete_selected()
+                with patch('gui.file_browser.send2trash', side_effect=PermissionError("Permission denied")):
+                    browser._delete_selected()
 
-                # Verify error dialog was shown
-                assert mock_error.called
-                call_args = mock_error.call_args[0]
-                assert "Permission denied" in call_args[2]
+                    # Verify error dialog was shown
+                    assert mock_error.called
+                    call_args = mock_error.call_args[0]
+                    assert "Permission denied" in call_args[2]
