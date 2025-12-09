@@ -201,6 +201,7 @@ blender_project_manager/
 - Workarounds for bugs in external libraries
 - Important constraints or assumptions
 - Security-related decisions
+- Visual organization and section separation in long files
 
 **Examples**:
 
