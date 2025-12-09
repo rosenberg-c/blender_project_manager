@@ -17,6 +17,7 @@ class BrokenLinksDialog(QDialog):
 
     remove_requested = Signal(list)
     find_requested = Signal(list)
+    remap_requested = Signal(list)
 
     def __init__(self, results: dict, controller=None, parent=None):
         """Initialize broken links dialog.
@@ -119,6 +120,7 @@ class BrokenLinksDialog(QDialog):
                 file_path = file_info.get("file", "")
                 broken_libraries = file_info.get("broken_libraries", [])
                 broken_textures = file_info.get("broken_textures", [])
+                broken_collection_names = file_info.get("broken_collection_names", [])
 
                 for lib in broken_libraries:
                     lib_name = lib.get("library_name", "Unknown")
@@ -164,6 +166,44 @@ class BrokenLinksDialog(QDialog):
                         "status": "error"
                     })
 
+                for col_ref in broken_collection_names:
+                    col_name = col_ref.get("collection_name", "Unknown")
+                    lib_name = col_ref.get("library_name", "Unknown")
+                    lib_path = col_ref.get("library_filepath", "Unknown")
+                    resolved_lib_path = col_ref.get("resolved_library_path", "")
+                    suggested_matches = col_ref.get("suggested_matches", [])
+                    link_mode = col_ref.get("link_mode", "unknown")
+                    available_collections = col_ref.get("available_collections", [])
+
+                    # Build details string with suggestions
+                    details_parts = [f"Mode: {link_mode}"]
+                    if suggested_matches:
+                        best_match = suggested_matches[0]
+                        similarity_pct = int(best_match["similarity"] * 100)
+                        details_parts.append(f"Suggest: {best_match['name']} ({similarity_pct}%)")
+                    else:
+                        details_parts.append("No suggestions")
+
+                    details = ", ".join(details_parts)
+
+                    self.rows_data.append({
+                        "file": file_path,
+                        "file_name": file_name,
+                        "type": "Collection Name",
+                        "name": col_name,
+                        "collection_name": col_name,
+                        "path": f"Library: {lib_name}",
+                        "library_name": lib_name,
+                        "library_filepath": lib_path,
+                        "resolved_library_path": resolved_lib_path,
+                        "suggested_matches": suggested_matches,
+                        "link_mode": link_mode,
+                        "available_collections": available_collections,
+                        "instance_object_name": col_ref.get("instance_object_name"),
+                        "details": details,
+                        "status": "collection_renamed"
+                    })
+
             self.table.setRowCount(len(self.rows_data))
 
             for i, row_data in enumerate(self.rows_data):
@@ -186,6 +226,10 @@ class BrokenLinksDialog(QDialog):
                     for col in range(5):
                         self.table.item(i, col).setBackground(QColor(255, 230, 230))
                         self.table.item(i, col).setForeground(QColor(139, 0, 0))
+                elif row_data["status"] == "collection_renamed":
+                    for col in range(5):
+                        self.table.item(i, col).setBackground(QColor(255, 245, 200))
+                        self.table.item(i, col).setForeground(QColor(153, 102, 0))
 
             self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
             self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -195,7 +239,7 @@ class BrokenLinksDialog(QDialog):
 
             layout.addWidget(self.table)
 
-            legend_label = QLabel("<i>Red = Broken links | Green = Successfully relinked</i>")
+            legend_label = QLabel("<i>Red = Broken links | Orange = Collection renamed | Green = Successfully relinked</i>")
             layout.addWidget(legend_label)
 
         btn_layout = QHBoxLayout()
@@ -205,6 +249,13 @@ class BrokenLinksDialog(QDialog):
             self.find_files_btn.setToolTip("Search the project directory for the missing files and relink them")
             self.find_files_btn.clicked.connect(self._find_files)
             btn_layout.addWidget(self.find_files_btn)
+
+            btn_layout.addSpacing(10)
+
+            self.remap_collection_btn = QPushButton("Remap Collection")
+            self.remap_collection_btn.setToolTip("Remap selected broken collection name references to new names")
+            self.remap_collection_btn.clicked.connect(self._remap_collection)
+            btn_layout.addWidget(self.remap_collection_btn)
 
             btn_layout.addSpacing(10)
 
@@ -294,6 +345,31 @@ class BrokenLinksDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             self.remove_requested.emit(self.rows_data)
+
+    def _remap_collection(self):
+        """Remap selected broken collection name references."""
+        from gui.ui_strings import TITLE_NO_SELECTION
+
+        selected_rows = self.table.selectionModel().selectedRows()
+        if not selected_rows:
+            QMessageBox.warning(self, TITLE_NO_SELECTION, "No collection references selected.\n\nPlease select collection name references to remap.")
+            return
+
+        selected_links = [self.rows_data[row.row()] for row in selected_rows]
+
+        # Filter only collection name references
+        collection_refs = [link for link in selected_links if link.get("type") == "Collection Name"]
+
+        if not collection_refs:
+            QMessageBox.warning(
+                self,
+                "No Collection References",
+                "No broken collection name references selected.\n\nPlease select collection name references (shown in orange) to remap."
+            )
+            return
+
+        # Emit signal with collection references
+        self.remap_requested.emit(collection_refs)
 
     def mark_as_relinked(self, relinked_paths: set):
         """Mark rows as relinked (green) based on their missing paths.

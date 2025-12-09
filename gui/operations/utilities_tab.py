@@ -654,6 +654,7 @@ class UtilitiesTab(BaseOperationTab):
                 dialog = BrokenLinksDialog(data, self.controller, self)
                 dialog.remove_requested.connect(lambda links: self._remove_broken_links(links, dialog))
                 dialog.find_requested.connect(lambda links: self._find_and_relink(links, dialog))
+                dialog.remap_requested.connect(lambda refs: self._remap_collection_names(refs, dialog))
                 dialog.exec()
 
             except Exception as e:
@@ -954,3 +955,121 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_FIND_FILES.format(error=str(e)))
+
+    def _remap_collection_names(self, collection_refs: list, dialog=None):
+        """Remap broken collection name references.
+
+        Args:
+            collection_refs: List of broken collection reference dictionaries
+            dialog: Optional BrokenLinksDialog to update after remapping
+        """
+        try:
+            import json
+            from pathlib import Path
+            from PySide6.QtWidgets import QApplication, QDialog
+            from gui.progress_dialog import OperationProgressDialog
+            from gui.collection_remap_dialog import CollectionRemapDialog
+            from blender_lib.constants import TIMEOUT_VERY_LONG
+            from services.blender_service import extract_json_from_output
+
+            # Show dialog for user to select new collection names
+            remap_dialog = CollectionRemapDialog(collection_refs, self)
+            if remap_dialog.exec() != QDialog.Accepted:
+                return
+
+            remappings = remap_dialog.get_remappings()
+            if not remappings:
+                self.show_warning("No Remappings", "No collection remappings were selected.")
+                return
+
+            # Group remappings by file
+            remappings_by_file = {}
+            for remap in remappings:
+                file_path = remap["file"]
+                if file_path not in remappings_by_file:
+                    remappings_by_file[file_path] = []
+                remappings_by_file[file_path].append(remap)
+
+            runner = self.get_blender_runner()
+            script_path = Path(__file__).parent.parent.parent / "blender_lib" / "fix_collection_names.py"
+
+            progress_dialog = OperationProgressDialog("Remapping Collections", self)
+            progress_dialog.show()
+            QApplication.processEvents()
+
+            def on_output_line(line: str):
+                """Process each line of output from Blender script."""
+                if line.startswith("LOG: "):
+                    message = line[5:]
+                    progress_dialog.log_text.append(message)
+                    QApplication.processEvents()
+
+            total_remapped = 0
+            total_failed = 0
+            files_modified = []
+
+            try:
+                # Process each file
+                for file_path, file_remappings in remappings_by_file.items():
+                    progress_dialog.log_text.append(f"\nProcessing {Path(file_path).name}...")
+                    QApplication.processEvents()
+
+                    remappings_json = json.dumps(file_remappings)
+
+                    result = runner.run_script_with_progress(
+                        script_path,
+                        {
+                            "blend-file": file_path,
+                            "remappings": remappings_json
+                        },
+                        progress_callback=on_output_line,
+                        timeout=TIMEOUT_VERY_LONG
+                    )
+
+                    data = extract_json_from_output(result.stdout)
+
+                    if "error" in data and data["error"]:
+                        raise Exception(data["error"])
+
+                    total_remapped += data.get("total_remapped", 0)
+                    total_failed += data.get("total_failed", 0)
+
+                    if data.get("total_remapped", 0) > 0:
+                        files_modified.append({
+                            "file_name": data.get("file_name", Path(file_path).name),
+                            "remapped_count": data.get("total_remapped", 0)
+                        })
+
+                progress_dialog.update_progress(100, "Remapping complete!")
+                progress_dialog.exec()
+
+                # Build result message
+                message_parts = []
+
+                if total_remapped > 0:
+                    message_parts.append(f"<b>Successfully remapped {total_remapped} collection reference(s)!</b><br>")
+                    message_parts.append(f"<br>Files modified: {len(files_modified)}<br><br>")
+
+                    for file_info in files_modified[:5]:
+                        file_name = file_info.get("file_name", "Unknown")
+                        remapped_count = file_info.get("remapped_count", 0)
+                        message_parts.append(f"<b>• {file_name}</b><br>")
+                        message_parts.append(f"  Remapped {remapped_count} collection(s)<br>")
+
+                    if len(files_modified) > 5:
+                        message_parts.append(f"<br><i>... and {len(files_modified) - 5} more file(s)</i><br>")
+                else:
+                    message_parts.append("<b>No collections were remapped.</b><br>")
+
+                if total_failed > 0:
+                    message_parts.append(f"<br><span style='color: orange;'>{total_failed} remapping(s) failed</span><br>")
+
+                self.show_info("Remap Complete", "".join(message_parts))
+
+            except Exception as e:
+                progress_dialog.mark_error(str(e))
+                progress_dialog.exec()
+                raise
+
+        except Exception as e:
+            self.show_error("Error", f"Failed to remap collections:\n\n{str(e)}")

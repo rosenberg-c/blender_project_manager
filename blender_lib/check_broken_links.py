@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
+from validate_collection_names import validate_collection_names_in_file
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core.file_scanner import find_blend_files
@@ -37,6 +38,7 @@ def check_broken_links_in_file(blend_file: Path):
         "broken_textures": [],
         "broken_objects": [],
         "broken_collections": [],
+        "broken_collection_names": [],
         "total_broken": 0
     }
 
@@ -122,6 +124,20 @@ def check_broken_links_in_file(blend_file: Path):
         else:
             print(f"LOG: ✓ Texture OK: '{img.name}'", flush=True)
 
+    # Check for broken collection name references (collections linked from existing libraries
+    # but the collection name has been renamed or deleted in the source file)
+    print(f"LOG: Validating collection name references...", flush=True)
+    try:
+        collection_validation = validate_collection_names_in_file(blend_file)
+
+        if "error" not in collection_validation and collection_validation.get("broken_collection_refs"):
+            result["broken_collection_names"] = collection_validation["broken_collection_refs"]
+            result["total_broken"] += len(collection_validation["broken_collection_refs"])
+            print(f"LOG: Found {len(collection_validation['broken_collection_refs'])} broken collection name(s)", flush=True)
+    except Exception as e:
+        print(f"LOG: Warning: Collection name validation failed: {str(e)}", flush=True)
+        # Don't fail the entire check if collection validation fails
+
     return result
 
 
@@ -189,7 +205,8 @@ if __name__ == "__main__":
             files_with_broken_links=[],
             total_files_checked=0,
             total_files_with_issues=0,
-            total_broken_links=0
+            total_broken_links=0,
+            broken_collection_names=[]
         )
         output_json(error_result)
         sys.exit(1)
