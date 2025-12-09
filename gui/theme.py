@@ -189,6 +189,58 @@ class Theme:
             border: 1px solid {c['accent']};
         }}
 
+        /* Combo Box */
+        QComboBox {{
+            background-color: {c['bg_main']};
+            color: {c['text_primary']};
+            border: 1px solid {c['border_medium']};
+            border-radius: {r['sm']};
+            padding: {s['sm']} {s['md']};
+            font-size: {f['md']};
+            min-height: 20px;
+        }}
+
+        QComboBox:hover {{
+            border: 1px solid {c['border_dark']};
+        }}
+
+        QComboBox:focus {{
+            border: 1px solid {c['accent']};
+        }}
+
+        QComboBox::drop-down {{
+            border: none;
+            width: 20px;
+        }}
+
+        QComboBox::down-arrow {{
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 6px solid {c['text_primary']};
+            width: 0px;
+            height: 0px;
+            margin-right: 5px;
+        }}
+
+        QComboBox QAbstractItemView {{
+            background-color: {c['bg_main']};
+            color: {c['text_primary']};
+            border: 1px solid {c['border_medium']};
+            selection-background-color: {c['accent']};
+            selection-color: {c['text_inverse']};
+            outline: none;
+        }}
+
+        QComboBox QAbstractItemView::item {{
+            padding: {s['sm']} {s['md']};
+            min-height: 20px;
+        }}
+
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {c['bg_secondary']};
+        }}
+
         /* Buttons - Base Style */
         QPushButton {{
             background-color: {c['bg_secondary']};
@@ -251,6 +303,82 @@ class Theme:
             padding: {s['sm']};
             font-size: {f['sm']};
             font-family: "Courier New", monospace;
+        }}
+
+        /* List Widget */
+        QListWidget {{
+            background-color: {c['bg_main']};
+            color: {c['text_primary']};
+            border: 1px solid {c['border_medium']};
+            border-radius: {r['sm']};
+            selection-background-color: {c['accent']};
+            selection-color: {c['text_inverse']};
+        }}
+
+        QListWidget::item {{
+            padding: {s['sm']};
+        }}
+
+        QListWidget::item:hover {{
+            background-color: {c['bg_secondary']};
+        }}
+
+        QListWidget::item:selected {{
+            background-color: {c['accent']};
+            color: {c['text_inverse']};
+        }}
+
+        /* Scroll Area */
+        QScrollArea {{
+            background-color: {c['bg_main']};
+            border: none;
+        }}
+
+        /* Scroll Bars */
+        QScrollBar:vertical {{
+            background-color: {c['bg_secondary']};
+            width: 12px;
+            border: none;
+        }}
+
+        QScrollBar::handle:vertical {{
+            background-color: {c['border_medium']};
+            border-radius: {r['sm']};
+            min-height: 20px;
+        }}
+
+        QScrollBar::handle:vertical:hover {{
+            background-color: {c['border_dark']};
+        }}
+
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+
+        QScrollBar:horizontal {{
+            background-color: {c['bg_secondary']};
+            height: 12px;
+            border: none;
+        }}
+
+        QScrollBar::handle:horizontal {{
+            background-color: {c['border_medium']};
+            border-radius: {r['sm']};
+            min-width: 20px;
+        }}
+
+        QScrollBar::handle:horizontal:hover {{
+            background-color: {c['border_dark']};
+        }}
+
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+            width: 0px;
+        }}
+
+        /* Widget Containers */
+        QWidget {{
+            background-color: {c['bg_main']};
+            color: {c['text_primary']};
         }}
 
         /* Tree View */
