@@ -469,8 +469,16 @@ class FileBrowserWidget(QWidget):
         if text:
             self.tree.expandAll()
         else:
+            # When clearing search, ensure we maintain the project root
+            if self.project.is_open and self.project.project_root:
+                # Re-set the root index to ensure we stay within project directory
+                root_index = self.file_system_model.index(str(self.project.project_root))
+                proxy_root_index = self.proxy_model.mapFromSource(root_index)
+                self.tree.setRootIndex(proxy_root_index)
+
             self.tree.collapseAll()
             self.tree.expandToDepth(1)
+            self._expand_pinned_paths()
 
     def _clear_search(self):
         """Clear the search box."""
