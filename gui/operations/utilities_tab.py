@@ -433,7 +433,9 @@ class UtilitiesTab(BaseOperationTab):
                     # Show results dialog
                     from gui.unused_files_dialog import UnusedFilesDialog
 
-                    dialog = UnusedFilesDialog(result, project_root, self)
+                    # Get config file from operations panel
+                    config_file = self.operations_panel.config_file if self.operations_panel else None
+                    dialog = UnusedFilesDialog(result, project_root, config_file, self)
                     dialog.exec()
                 else:
                     errors = result.get("errors", ["Unknown error"]) if result else ["Unknown error"]

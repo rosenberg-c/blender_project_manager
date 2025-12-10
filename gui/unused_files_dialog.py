@@ -1,5 +1,6 @@
 """Dialog for displaying and managing unused files in the project."""
 
+import json
 import os
 from pathlib import Path
 
@@ -20,23 +21,26 @@ class UnusedFilesDialog(QDialog):
 
     files_deleted = Signal(list)
 
-    def __init__(self, results: dict, project_root: Path, parent=None):
+    def __init__(self, results: dict, project_root: Path, config_file: Path = None, parent=None):
         """Initialize unused files dialog.
 
         Args:
             results: Dictionary with unused files results
             project_root: Path to project root directory
+            config_file: Path to config file for state persistence
             parent: Parent widget
         """
         super().__init__(parent)
         self.results = results
         self.project_root = project_root
+        self.config_file = config_file
         self.unused_files = results.get("unused_files", [])
 
         self.setWindowTitle("Unused Files")
         self.resize(1100, 700)
 
         self.setup_ui()
+        self._restore_checkbox_states()
 
     def setup_ui(self):
         """Create UI layout."""
@@ -115,17 +119,17 @@ class UnusedFilesDialog(QDialog):
             # Filter buttons
             self.show_textures_check = QCheckBox("Textures")
             self.show_textures_check.setChecked(True)
-            self.show_textures_check.stateChanged.connect(self._apply_filters)
+            self.show_textures_check.stateChanged.connect(self._on_checkbox_changed)
             controls_layout.addWidget(self.show_textures_check)
 
             self.show_blends_check = QCheckBox(".blend files")
             self.show_blends_check.setChecked(True)
-            self.show_blends_check.stateChanged.connect(self._apply_filters)
+            self.show_blends_check.stateChanged.connect(self._on_checkbox_changed)
             controls_layout.addWidget(self.show_blends_check)
 
             self.show_backups_check = QCheckBox("Backups")
             self.show_backups_check.setChecked(True)
-            self.show_backups_check.stateChanged.connect(self._apply_filters)
+            self.show_backups_check.stateChanged.connect(self._on_checkbox_changed)
             controls_layout.addWidget(self.show_backups_check)
 
             layout.addLayout(controls_layout)
@@ -212,6 +216,11 @@ class UnusedFilesDialog(QDialog):
             # Location
             location_item = QTableWidgetItem(file_info["relative_path"])
             self.table.setItem(row, 4, location_item)
+
+    def _on_checkbox_changed(self):
+        """Handle checkbox state changes."""
+        self._apply_filters()
+        self._save_checkbox_states()
 
     def _apply_filters(self):
         """Apply type filters to table rows."""
@@ -343,3 +352,50 @@ class UnusedFilesDialog(QDialog):
                 "Deletion Failed",
                 f"Failed to delete files:\n" + "\n".join(errors[:5])
             )
+
+    def _save_checkbox_states(self):
+        """Save checkbox states to config file."""
+        if not self.config_file:
+            return
+
+        try:
+            # Load existing config
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            # Save checkbox states
+            config_data['unused_files_dialog'] = {
+                'show_textures': self.show_textures_check.isChecked(),
+                'show_blends': self.show_blends_check.isChecked(),
+                'show_backups': self.show_backups_check.isChecked()
+            }
+
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+
+        except Exception as e:
+            print(f"Warning: Could not save unused files dialog state: {e}")
+
+    def _restore_checkbox_states(self):
+        """Restore checkbox states from config file."""
+        if not self.config_file or not self.config_file.exists():
+            return
+
+        try:
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            dialog_state = config_data.get('unused_files_dialog', {})
+
+            # Restore checkbox states (default to True if not found)
+            if hasattr(self, 'show_textures_check'):
+                self.show_textures_check.setChecked(dialog_state.get('show_textures', True))
+            if hasattr(self, 'show_blends_check'):
+                self.show_blends_check.setChecked(dialog_state.get('show_blends', True))
+            if hasattr(self, 'show_backups_check'):
+                self.show_backups_check.setChecked(dialog_state.get('show_backups', True))
+
+        except Exception as e:
+            print(f"Warning: Could not restore unused files dialog state: {e}")
