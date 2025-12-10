@@ -269,3 +269,81 @@ class TestFileBrowserDelete:
                     assert mock_error.called
                     call_args = mock_error.call_args[0]
                     assert "Permission denied" in call_args[2]
+
+    def test_clear_search_maintains_project_root(self, qapp, tmp_path):
+        """Test that clearing search box maintains project root and doesn't show drive root."""
+        # Create test project structure
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        test_file = project_root / "test.blend"
+        test_file.write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = project_root
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+
+        # Set the project root
+        browser.set_root(project_root)
+
+        # Get the initial root index (should be project root)
+        initial_root_index = browser.tree.rootIndex()
+        initial_root_path = browser.file_system_model.filePath(
+            browser.proxy_model.mapToSource(initial_root_index)
+        )
+        assert Path(initial_root_path) == project_root
+
+        # Simulate typing in search box
+        browser.search_box.setText("test")
+
+        # Simulate clearing the search box
+        browser.search_box.clear()
+
+        # Get the root index after clearing (should still be project root)
+        after_clear_root_index = browser.tree.rootIndex()
+        after_clear_root_path = browser.file_system_model.filePath(
+            browser.proxy_model.mapToSource(after_clear_root_index)
+        )
+
+        # Verify root is still the project root, not the drive root
+        assert Path(after_clear_root_path) == project_root
+        assert after_clear_root_path == initial_root_path
+
+    def test_search_and_clear_maintains_project_scope(self, qapp, tmp_path):
+        """Test that search and clear cycle keeps browser scoped to project directory."""
+        # Create test project with subdirectories
+        project_root = tmp_path / "my_project"
+        project_root.mkdir()
+        subdir = project_root / "assets"
+        subdir.mkdir()
+        (subdir / "model.blend").write_text("test")
+        (project_root / "scene.blend").write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = project_root
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+        browser.set_root(project_root)
+
+        # Perform multiple search and clear cycles
+        for search_term in ["model", "scene", "test"]:
+            # Search
+            browser.search_box.setText(search_term)
+
+            # Clear
+            browser.search_box.clear()
+
+            # Verify we're still in project root
+            current_root_index = browser.tree.rootIndex()
+            current_root_path = browser.file_system_model.filePath(
+                browser.proxy_model.mapToSource(current_root_index)
+            )
+            assert Path(current_root_path) == project_root
