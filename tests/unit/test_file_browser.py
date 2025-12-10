@@ -347,3 +347,64 @@ class TestFileBrowserDelete:
                 browser.proxy_model.mapToSource(current_root_index)
             )
             assert Path(current_root_path) == project_root
+
+    def test_search_shows_files_in_collapsed_folders(self, qapp, tmp_path):
+        """Test that searching shows files even if their parent folder is collapsed."""
+        # Create test project with nested structure
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        # Create nested directories
+        assets_dir = project_root / "assets"
+        assets_dir.mkdir()
+        models_dir = assets_dir / "models"
+        models_dir.mkdir()
+
+        # Create test files at different levels
+        (project_root / "root_file.blend").write_text("test")
+        (assets_dir / "asset_file.blend").write_text("test")
+        (models_dir / "character.blend").write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = project_root
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+        browser.set_root(project_root)
+
+        # Initially, nested folders should be collapsed
+        # Search for a file deep in the hierarchy
+        browser.search_box.setText("character")
+
+        # Verify the proxy model shows the matching file
+        # The file should be visible even though its parent folders were collapsed
+        matches_found = False
+        for row in range(browser.proxy_model.rowCount()):
+            index = browser.proxy_model.index(row, 0)
+            # Recursively check for the file in the filtered model
+            if self._check_for_file_in_tree(browser.proxy_model, index, "character.blend"):
+                matches_found = True
+                break
+
+        assert matches_found, "Search should show files even in collapsed folders"
+
+    def _check_for_file_in_tree(self, model, parent_index, filename):
+        """Helper to recursively check if a file exists in the tree."""
+        # Check current item
+        if model.data(parent_index, 0) == filename:
+            return True
+
+        # Check children
+        for row in range(model.rowCount(parent_index)):
+            child_index = model.index(row, 0, parent_index)
+            if model.data(child_index, 0) == filename:
+                return True
+            # Recurse into directories
+            if model.hasChildren(child_index):
+                if self._check_for_file_in_tree(model, child_index, filename):
+                    return True
+
+        return False

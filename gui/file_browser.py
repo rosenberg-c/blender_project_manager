@@ -85,44 +85,10 @@ class FileSystemProxyModel(QSortFilterProxyModel):
         # Get the file path
         file_path = Path(source_model.filePath(index))
 
-        # Check if this item matches
-        if self.search_text in file_path.name.lower():
-            return True
-
-        # If this is a directory, check if any children match
-        if file_path.is_dir():
-            return self._has_matching_children(index, source_model)
-
-        return False
-
-    def _has_matching_children(self, parent_index: QModelIndex, source_model) -> bool:
-        """Recursively check if any children match the search.
-
-        Args:
-            parent_index: Parent index to check
-            source_model: Source file system model
-
-        Returns:
-            True if any descendant matches the search
-        """
-        # Check direct children
-        for row in range(source_model.rowCount(parent_index)):
-            child_index = source_model.index(row, 0, parent_index)
-            if not child_index.isValid():
-                continue
-
-            file_path = Path(source_model.filePath(child_index))
-
-            # Check if child matches
-            if self.search_text in file_path.name.lower():
-                return True
-
-            # If child is a directory, check its children
-            if file_path.is_dir():
-                if self._has_matching_children(child_index, source_model):
-                    return True
-
-        return False
+        # Check if this item's name matches the search
+        # With recursive filtering enabled, Qt will automatically show
+        # parent directories if any descendant matches
+        return self.search_text in file_path.name.lower()
 
 
 class FileItemDelegate(QStyledItemDelegate):
