@@ -22,7 +22,7 @@ def find_layer_collection(layer_collection, collection_name):
     return None
 
 
-def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True, hide_viewport=False):
+def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True, hide_viewport=False, hide_instancer=False):
     """Link objects/collections from source file into target scene.
 
     Args:
@@ -34,6 +34,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
         link_mode: 'instance' (Blender default) or 'individual' (separate links)
         dry_run: If True, only preview without making changes
         hide_viewport: If True, hide the target collection (eye icon) in outliner
+        hide_instancer: If True, hide instancer visualization for Empty objects
 
     Returns:
         Dictionary with operation results
@@ -258,6 +259,10 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     empty.instance_type = 'COLLECTION'
                     empty.instance_collection = linked_collection
 
+                    # Hide instancer visualization if requested
+                    if hide_instancer:
+                        empty.show_instancer_for_viewport = False
+
                     # Add the empty to the target collection
                     target_collection.objects.link(empty)
 
@@ -437,6 +442,7 @@ if __name__ == "__main__":
         parser.add_argument('--link-mode', default='instance', help='instance or individual')
         parser.add_argument('--dry-run', default='true', help='true or false')
         parser.add_argument('--hide-viewport', default='false', help='true or false')
+        parser.add_argument('--hide-instancer', default='false', help='true or false')
 
         # Get args after the '--' separator
         args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
@@ -461,6 +467,9 @@ if __name__ == "__main__":
         # Parse hide viewport flag
         hide_viewport = args.hide_viewport.lower() == 'true'
 
+        # Parse hide instancer flag
+        hide_instancer = args.hide_instancer.lower() == 'true'
+
         # Execute link operation
         result = link_items(
             args.source_file,
@@ -470,7 +479,8 @@ if __name__ == "__main__":
             args.target_collection,
             link_mode,
             dry_run,
-            hide_viewport
+            hide_viewport,
+            hide_instancer
         )
 
         # Output as JSON

@@ -224,6 +224,16 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_as_hidden_checkbox.stateChanged.connect(self._save_link_state)
         tab_layout.addWidget(self.link_as_hidden_checkbox)
 
+        # Hide instancer option
+        self.link_hide_instancer_checkbox = QCheckBox("Hide instancer")
+        self.link_hide_instancer_checkbox.setToolTip(
+            "Hide the instancer visualization (axes and bounding box)\n"
+            "for Empty objects with collection instances"
+        )
+        self.link_hide_instancer_checkbox.setChecked(False)
+        self.link_hide_instancer_checkbox.stateChanged.connect(self._save_link_state)
+        tab_layout.addWidget(self.link_hide_instancer_checkbox)
+
         # Buttons
         btn_row = QHBoxLayout()
 
@@ -607,7 +617,8 @@ class LinkObjectsTab(BaseOperationTab):
                     item_types=item_types,
                     target_collection=target_collection if target_collection else "",
                     link_mode=link_mode,
-                    hide_viewport=self.link_as_hidden_checkbox.isChecked()
+                    hide_viewport=self.link_as_hidden_checkbox.isChecked(),
+                    hide_instancer=self.link_hide_instancer_checkbox.isChecked()
                 )
 
                 if dry_run:
@@ -700,6 +711,9 @@ class LinkObjectsTab(BaseOperationTab):
             # Save link as hidden checkbox state
             link_state['link_as_hidden'] = self.link_as_hidden_checkbox.isChecked()
 
+            # Save hide instancer checkbox state
+            link_state['hide_instancer'] = self.link_hide_instancer_checkbox.isChecked()
+
             config_data['link_operation'] = link_state
 
             # Write back to file
@@ -772,6 +786,10 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore link as hidden checkbox state
             link_as_hidden = link_state.get('link_as_hidden', False)
             self.link_as_hidden_checkbox.setChecked(link_as_hidden)
+
+            # Restore hide instancer checkbox state
+            hide_instancer = link_state.get('hide_instancer', False)
+            self.link_hide_instancer_checkbox.setChecked(hide_instancer)
 
         except Exception as e:
             print(f"Warning: Could not restore link operation state: {e}")

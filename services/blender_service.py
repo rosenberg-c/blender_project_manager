@@ -1084,9 +1084,6 @@ class BlenderService:
         if len(params.item_names) != len(params.item_types):
             errors.append("Item names and types count mismatch")
 
-        if not params.target_collection:
-            errors.append("Target collection name is required")
-
         if errors:
             return OperationPreview(
                 operation_name="Link Objects/Collections",
@@ -1110,7 +1107,8 @@ class BlenderService:
                     "target-collection": params.target_collection,
                     "link-mode": params.link_mode,
                     "dry-run": "true",
-                    "hide-viewport": "true" if params.hide_viewport else "false"
+                    "hide-viewport": "true" if params.hide_viewport else "false",
+                    "hide-instancer": "true" if params.hide_instancer else "false"
                 },
                 timeout=120
             )
@@ -1206,7 +1204,8 @@ class BlenderService:
                     "target-collection": params.target_collection,
                     "link-mode": params.link_mode,
                     "dry-run": "false",
-                    "hide-viewport": "true" if params.hide_viewport else "false"
+                    "hide-viewport": "true" if params.hide_viewport else "false",
+                    "hide-instancer": "true" if params.hide_instancer else "false"
                 },
                 timeout=180
             )

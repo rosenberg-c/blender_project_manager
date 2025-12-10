@@ -87,3 +87,4 @@ class LinkOperationParams:
     target_collection: str       # Collection name to create/use in target
     link_mode: str = 'instance'  # 'instance' (Blender default) or 'individual'
     hide_viewport: bool = False  # Hide the target collection (eye icon) in outliner
+    hide_instancer: bool = False  # Hide instancer visualization for Empty objects
