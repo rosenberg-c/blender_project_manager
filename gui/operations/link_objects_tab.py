@@ -206,6 +206,13 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_add_suffix_checkbox.stateChanged.connect(self._save_link_state)
         tab_layout.addWidget(self.link_add_suffix_checkbox)
 
+        # Link as hidden option
+        self.link_as_hidden_checkbox = QCheckBox("Link as hidden")
+        self.link_as_hidden_checkbox.setToolTip("Hide the target collection (eye icon) in the outliner")
+        self.link_as_hidden_checkbox.setChecked(False)
+        self.link_as_hidden_checkbox.stateChanged.connect(self._save_link_state)
+        tab_layout.addWidget(self.link_as_hidden_checkbox)
+
         # Buttons
         btn_row = QHBoxLayout()
 
@@ -572,7 +579,8 @@ class LinkObjectsTab(BaseOperationTab):
                     item_names=item_names,
                     item_types=item_types,
                     target_collection=target_collection if target_collection else "",
-                    link_mode=link_mode
+                    link_mode=link_mode,
+                    hide_viewport=self.link_as_hidden_checkbox.isChecked()
                 )
 
                 if dry_run:
@@ -659,6 +667,9 @@ class LinkObjectsTab(BaseOperationTab):
             # Save add suffix checkbox state
             link_state['add_link_suffix'] = self.link_add_suffix_checkbox.isChecked()
 
+            # Save link as hidden checkbox state
+            link_state['link_as_hidden'] = self.link_as_hidden_checkbox.isChecked()
+
             config_data['link_operation'] = link_state
 
             # Write back to file
@@ -721,6 +732,10 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore add suffix checkbox state
             add_suffix = link_state.get('add_link_suffix', False)
             self.link_add_suffix_checkbox.setChecked(add_suffix)
+
+            # Restore link as hidden checkbox state
+            link_as_hidden = link_state.get('link_as_hidden', False)
+            self.link_as_hidden_checkbox.setChecked(link_as_hidden)
 
         except Exception as e:
             print(f"Warning: Could not restore link operation state: {e}")

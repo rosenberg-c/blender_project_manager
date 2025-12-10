@@ -11,7 +11,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 from script_utils import output_json, create_error_result, create_success_result
 
 
-def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True):
+def find_layer_collection(layer_collection, collection_name):
+    """Recursively find a layer collection by name."""
+    if layer_collection.name == collection_name:
+        return layer_collection
+    for child in layer_collection.children:
+        found = find_layer_collection(child, collection_name)
+        if found:
+            return found
+    return None
+
+
+def link_items(source_file, target_scene, item_names, item_types, target_collection_name, link_mode='instance', dry_run=True, hide_viewport=False):
     """Link objects/collections from source file into target scene.
 
     Args:
@@ -22,6 +33,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
         target_collection_name: Name of collection to create/use in target
         link_mode: 'instance' (Blender default) or 'individual' (separate links)
         dry_run: If True, only preview without making changes
+        hide_viewport: If True, hide the target collection (eye icon) in outliner
 
     Returns:
         Dictionary with operation results
@@ -277,6 +289,14 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                         "status": "linked"
                     })
 
+                # Hide the target collection (eye icon) if requested
+                if hide_viewport:
+                    # Access the layer collection to set the eye icon visibility
+                    layer_collection = bpy.context.view_layer.layer_collection
+                    target_layer_col = find_layer_collection(layer_collection, target_collection_name)
+                    if target_layer_col:
+                        target_layer_col.hide_viewport = True
+
                 # Save the file
                 bpy.ops.wm.save_mainfile()
                 result["success"] = True
@@ -326,10 +346,19 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     target_collection = bpy.data.collections[target_collection_name]
                     result["target_collection_status"] = "existed"
 
+                # Hide the target collection (eye icon) if requested
+                if hide_viewport:
+                    # Access the layer collection to set the eye icon visibility
+                    layer_collection = bpy.context.view_layer.layer_collection
+                    target_layer_col = find_layer_collection(layer_collection, target_collection_name)
+                    if target_layer_col:
+                        target_layer_col.hide_viewport = True
+
                 # Add linked objects directly to target collection
                 for obj in linked_objects:
                     if obj.name not in target_collection.objects:
                         target_collection.objects.link(obj)
+
                         result["linked_items"].append({
                             "name": obj.name,
                             "type": "object",
@@ -340,6 +369,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                 for col in linked_collections:
                     if col.name not in [c.name for c in target_collection.children]:
                         target_collection.children.link(col)
+
                         result["linked_items"].append({
                             "name": col.name,
                             "type": "collection",
@@ -370,6 +400,7 @@ if __name__ == "__main__":
         parser.add_argument('--target-collection', required=True, help='Target collection name')
         parser.add_argument('--link-mode', default='instance', help='instance or individual')
         parser.add_argument('--dry-run', default='true', help='true or false')
+        parser.add_argument('--hide-viewport', default='false', help='true or false')
 
         # Get args after the '--' separator
         args = parser.parse_args(sys.argv[sys.argv.index('--') + 1:])
@@ -391,6 +422,9 @@ if __name__ == "__main__":
         # Parse link mode
         link_mode = args.link_mode.lower()
 
+        # Parse hide viewport flag
+        hide_viewport = args.hide_viewport.lower() == 'true'
+
         # Execute link operation
         result = link_items(
             args.source_file,
@@ -399,7 +433,8 @@ if __name__ == "__main__":
             item_types,
             args.target_collection,
             link_mode,
-            dry_run
+            dry_run,
+            hide_viewport
         )
 
         # Output as JSON

@@ -1109,7 +1109,8 @@ class BlenderService:
                     "item-types": ",".join(params.item_types),
                     "target-collection": params.target_collection,
                     "link-mode": params.link_mode,
-                    "dry-run": "true"
+                    "dry-run": "true",
+                    "hide-viewport": "true" if params.hide_viewport else "false"
                 },
                 timeout=120
             )
@@ -1204,7 +1205,8 @@ class BlenderService:
                     "item-types": ",".join(params.item_types),
                     "target-collection": params.target_collection,
                     "link-mode": params.link_mode,
-                    "dry-run": "false"
+                    "dry-run": "false",
+                    "hide-viewport": "true" if params.hide_viewport else "false"
                 },
                 timeout=180
             )

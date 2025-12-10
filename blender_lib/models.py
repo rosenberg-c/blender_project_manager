@@ -86,3 +86,4 @@ class LinkOperationParams:
     item_types: List[str]        # 'object' or 'collection' for each item
     target_collection: str       # Collection name to create/use in target
     link_mode: str = 'instance'  # 'instance' (Blender default) or 'individual'
+    hide_viewport: bool = False  # Hide the target collection (eye icon) in outliner
