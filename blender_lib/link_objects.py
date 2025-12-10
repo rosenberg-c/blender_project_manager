@@ -263,7 +263,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                     # Hide the empty object if requested and no collection name
                     if hide_viewport and not target_collection_name:
-                        empty.hide_viewport = True
+                        empty.hide_set(True)
 
                     result["linked_items"].append({
                         "name": col_name,
@@ -300,7 +300,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                     # Hide the object if requested and no collection name
                     if hide_viewport and not target_collection_name:
-                        linked_object.hide_viewport = True
+                        linked_object.hide_set(True)
 
                     result["linked_items"].append({
                         "name": obj_name,
@@ -385,7 +385,7 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                         # Hide the object if requested and no collection name
                         if hide_viewport and not target_collection_name:
-                            obj.hide_viewport = True
+                            obj.hide_set(True)
 
                         result["linked_items"].append({
                             "name": obj.name,
@@ -400,7 +400,11 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                         # Hide the collection if requested and no collection name
                         if hide_viewport and not target_collection_name:
-                            col.hide_viewport = True
+                            # Find the layer collection and hide it (eye icon)
+                            layer_collection = bpy.context.view_layer.layer_collection
+                            col_layer = find_layer_collection(layer_collection, col.name)
+                            if col_layer:
+                                col_layer.hide_viewport = True
 
                         result["linked_items"].append({
                             "name": col.name,
