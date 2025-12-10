@@ -261,6 +261,10 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     # Add the empty to the target collection
                     target_collection.objects.link(empty)
 
+                    # Hide the empty object if requested and no collection name
+                    if hide_viewport and not target_collection_name:
+                        empty.hide_viewport = True
+
                     result["linked_items"].append({
                         "name": col_name,
                         "type": "collection_instance",
@@ -293,6 +297,10 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
 
                     # Add the linked object to the target collection
                     target_collection.objects.link(linked_object)
+
+                    # Hide the object if requested and no collection name
+                    if hide_viewport and not target_collection_name:
+                        linked_object.hide_viewport = True
 
                     result["linked_items"].append({
                         "name": obj_name,
@@ -375,6 +383,10 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     if obj.name not in target_collection.objects:
                         target_collection.objects.link(obj)
 
+                        # Hide the object if requested and no collection name
+                        if hide_viewport and not target_collection_name:
+                            obj.hide_viewport = True
+
                         result["linked_items"].append({
                             "name": obj.name,
                             "type": "object",
@@ -385,6 +397,10 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                 for col in linked_collections:
                     if col.name not in [c.name for c in target_collection.children]:
                         target_collection.children.link(col)
+
+                        # Hide the collection if requested and no collection name
+                        if hide_viewport and not target_collection_name:
+                            col.hide_viewport = True
 
                         result["linked_items"].append({
                             "name": col.name,

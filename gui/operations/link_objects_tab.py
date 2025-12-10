@@ -215,7 +215,11 @@ class LinkObjectsTab(BaseOperationTab):
 
         # Link as hidden option
         self.link_as_hidden_checkbox = QCheckBox("Link as hidden")
-        self.link_as_hidden_checkbox.setToolTip("Hide the target collection (eye icon) in the outliner")
+        self.link_as_hidden_checkbox.setToolTip(
+            "Hide in viewport (eye icon):\n"
+            "• With collection: Hides the target collection\n"
+            "• Without collection: Hides the linked objects"
+        )
         self.link_as_hidden_checkbox.setChecked(False)
         self.link_as_hidden_checkbox.stateChanged.connect(self._save_link_state)
         tab_layout.addWidget(self.link_as_hidden_checkbox)
@@ -340,6 +344,7 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_collection_input.setVisible(is_checked)
         self.link_copy_name_btn.setVisible(is_checked)
         self.link_add_suffix_checkbox.setVisible(is_checked)
+        # Note: link_as_hidden_checkbox stays visible - it works for both modes
 
         # Save the preference
         self._save_link_state()
