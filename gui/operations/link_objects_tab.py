@@ -180,6 +180,13 @@ class LinkObjectsTab(BaseOperationTab):
 
         tab_layout.addSpacing(5)
 
+        # Add to collection checkbox
+        self.link_add_to_collection_checkbox = QCheckBox("Add to collection")
+        self.link_add_to_collection_checkbox.setToolTip("Place linked items inside a target collection")
+        self.link_add_to_collection_checkbox.setChecked(True)
+        self.link_add_to_collection_checkbox.stateChanged.connect(self._on_add_to_collection_changed)
+        tab_layout.addWidget(self.link_add_to_collection_checkbox)
+
         # Target collection (for both modes)
         self.collection_label = QLabel("Target collection name:")
         tab_layout.addWidget(self.collection_label)
@@ -322,6 +329,19 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_collection_input.setEnabled(True)
 
         # Save the mode preference
+        self._save_link_state()
+
+    def _on_add_to_collection_changed(self, state: int):
+        """Handle 'Add to collection' checkbox state change."""
+        is_checked = self.link_add_to_collection_checkbox.isChecked()
+
+        # Show/hide collection-related widgets
+        self.collection_label.setVisible(is_checked)
+        self.link_collection_input.setVisible(is_checked)
+        self.link_copy_name_btn.setVisible(is_checked)
+        self.link_add_suffix_checkbox.setVisible(is_checked)
+
+        # Save the preference
         self._save_link_state()
 
     def _update_scene_combo_state(self):
@@ -517,16 +537,18 @@ class LinkObjectsTab(BaseOperationTab):
         # Get link mode
         link_mode = 'instance' if self.link_mode_instance.isChecked() else 'individual'
 
-        # Get target collection name (required for both modes)
-        target_collection = self.link_collection_input.text().strip()
-        if not target_collection:
-            self.show_warning(TITLE_NO_COLLECTION, MSG_ENTER_COLLECTION_NAME)
-            return
+        # Get target collection name (only if "Add to collection" is checked)
+        target_collection = ""
+        if self.link_add_to_collection_checkbox.isChecked():
+            target_collection = self.link_collection_input.text().strip()
+            if not target_collection:
+                self.show_warning(TITLE_NO_COLLECTION, MSG_ENTER_COLLECTION_NAME)
+                return
 
-        # Add .link suffix if checkbox is checked
-        if self.link_add_suffix_checkbox.isChecked():
-            if not target_collection.endswith('.link'):
-                target_collection = target_collection + '.link'
+            # Add .link suffix if checkbox is checked
+            if self.link_add_suffix_checkbox.isChecked():
+                if not target_collection.endswith('.link'):
+                    target_collection = target_collection + '.link'
 
         # Extract item names and types
         item_names = []
@@ -541,8 +563,8 @@ class LinkObjectsTab(BaseOperationTab):
             self.show_warning(TITLE_NO_ITEMS, MSG_NO_VALID_ITEMS)
             return
 
-        # Check if target collection name conflicts with any selected item names
-        if target_collection in item_names:
+        # Check if target collection name conflicts with any selected item names (only if collection is being created)
+        if target_collection and target_collection in item_names:
             self.show_warning(
                 "Name Conflict",
                 f"The target collection name '{target_collection}' conflicts with one of the selected items.\n\n"
@@ -664,6 +686,9 @@ class LinkObjectsTab(BaseOperationTab):
             if self.link_collection_input.text():
                 link_state['last_target_collection'] = self.link_collection_input.text()
 
+            # Save add to collection checkbox state
+            link_state['add_to_collection'] = self.link_add_to_collection_checkbox.isChecked()
+
             # Save add suffix checkbox state
             link_state['add_link_suffix'] = self.link_add_suffix_checkbox.isChecked()
 
@@ -728,6 +753,12 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore last target collection
             last_collection = link_state.get('last_target_collection', '')
             self.link_collection_input.setText(last_collection)
+
+            # Restore add to collection checkbox state
+            add_to_collection = link_state.get('add_to_collection', True)
+            self.link_add_to_collection_checkbox.setChecked(add_to_collection)
+            # Trigger visibility update
+            self._on_add_to_collection_changed(0)
 
             # Restore add suffix checkbox state
             add_suffix = link_state.get('add_link_suffix', False)

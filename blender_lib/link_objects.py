@@ -73,16 +73,16 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
             elif item_type == 'collection':
                 collections_to_link.append(item_name)
 
-        # Check for naming conflicts with target collection
-        if target_collection_name in item_names:
+        # Check for naming conflicts with target collection (only if collection name is provided)
+        if target_collection_name and target_collection_name in item_names:
             result["errors"].append(
                 f"Target collection name '{target_collection_name}' conflicts with item being linked. "
                 f"Please choose a different collection name."
             )
             return result
 
-        # Check if target collection exists
-        target_collection_exists = target_collection_name in bpy.data.collections
+        # Check if target collection exists (only if collection name is provided)
+        target_collection_exists = target_collection_name and target_collection_name in bpy.data.collections
 
         if dry_run:
             # Preview mode - check what would happen
@@ -140,11 +140,14 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                         else:
                             result["errors"].append(f"Object '{obj_name}' not found in source file")
 
-                # Check target collection
-                if target_collection_name not in bpy.data.collections:
-                    result["target_collection_status"] = "will_create"
+                # Check target collection (only if collection name is provided)
+                if target_collection_name:
+                    if target_collection_name not in bpy.data.collections:
+                        result["target_collection_status"] = "will_create"
+                    else:
+                        result["target_collection_status"] = "exists"
                 else:
-                    result["target_collection_status"] = "exists"
+                    result["target_collection_status"] = "not_needed"
 
                 result["success"] = len(result["errors"]) == 0
 
@@ -182,11 +185,14 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                         else:
                             result["warnings"].append(f"Collection '{col_name}' not found in source file")
 
-                # Check target collection
-                if not target_collection_exists:
-                    result["target_collection_status"] = "will_create"
+                # Check target collection (only if collection name is provided)
+                if target_collection_name:
+                    if not target_collection_exists:
+                        result["target_collection_status"] = "will_create"
+                    else:
+                        result["target_collection_status"] = "exists"
                 else:
-                    result["target_collection_status"] = "exists"
+                    result["target_collection_status"] = "not_needed"
 
                 result["success"] = len(result["errors"]) == 0
 
@@ -205,14 +211,19 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                     result["errors"].append("Instance mode requires exactly ONE collection or object to be selected")
                     return result
 
-                # Create or get target collection
-                if target_collection_name not in bpy.data.collections:
-                    target_collection = bpy.data.collections.new(target_collection_name)
-                    bpy.context.scene.collection.children.link(target_collection)
-                    result["target_collection_status"] = "created"
+                # Create or get target collection (or use scene collection if no name provided)
+                if target_collection_name:
+                    if target_collection_name not in bpy.data.collections:
+                        target_collection = bpy.data.collections.new(target_collection_name)
+                        bpy.context.scene.collection.children.link(target_collection)
+                        result["target_collection_status"] = "created"
+                    else:
+                        target_collection = bpy.data.collections[target_collection_name]
+                        result["target_collection_status"] = "existed"
                 else:
-                    target_collection = bpy.data.collections[target_collection_name]
-                    result["target_collection_status"] = "existed"
+                    # No collection specified - use scene's main collection
+                    target_collection = bpy.context.scene.collection
+                    result["target_collection_status"] = "not_needed"
 
                 # Handle collection instance
                 if collections_to_link:
@@ -289,8 +300,8 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                         "status": "linked"
                     })
 
-                # Hide the target collection (eye icon) if requested
-                if hide_viewport:
+                # Hide the target collection (eye icon) if requested (only if we created a collection)
+                if hide_viewport and target_collection_name:
                     # Access the layer collection to set the eye icon visibility
                     layer_collection = bpy.context.view_layer.layer_collection
                     target_layer_col = find_layer_collection(layer_collection, target_collection_name)
@@ -337,17 +348,22 @@ def link_items(source_file, target_scene, item_names, item_types, target_collect
                 linked_objects = [obj for obj in bpy.data.objects if obj.name in objects_to_link and obj.library]
                 linked_collections = [col for col in bpy.data.collections if col.name in collections_to_link and col.library]
 
-                # Create or get target collection
-                if target_collection_name not in bpy.data.collections:
-                    target_collection = bpy.data.collections.new(target_collection_name)
-                    bpy.context.scene.collection.children.link(target_collection)
-                    result["target_collection_status"] = "created"
+                # Create or get target collection (or use scene collection if no name provided)
+                if target_collection_name:
+                    if target_collection_name not in bpy.data.collections:
+                        target_collection = bpy.data.collections.new(target_collection_name)
+                        bpy.context.scene.collection.children.link(target_collection)
+                        result["target_collection_status"] = "created"
+                    else:
+                        target_collection = bpy.data.collections[target_collection_name]
+                        result["target_collection_status"] = "existed"
                 else:
-                    target_collection = bpy.data.collections[target_collection_name]
-                    result["target_collection_status"] = "existed"
+                    # No collection specified - use scene's main collection
+                    target_collection = bpy.context.scene.collection
+                    result["target_collection_status"] = "not_needed"
 
-                # Hide the target collection (eye icon) if requested
-                if hide_viewport:
+                # Hide the target collection (eye icon) if requested (only if we created a collection)
+                if hide_viewport and target_collection_name:
                     # Access the layer collection to set the eye icon visibility
                     layer_collection = bpy.context.view_layer.layer_collection
                     target_layer_col = find_layer_collection(layer_collection, target_collection_name)
@@ -397,7 +413,7 @@ if __name__ == "__main__":
         parser.add_argument('--source-file', required=True, help='Path to source .blend file')
         parser.add_argument('--item-names', required=True, help='Comma-separated list of item names')
         parser.add_argument('--item-types', required=True, help='Comma-separated list of item types')
-        parser.add_argument('--target-collection', required=True, help='Target collection name')
+        parser.add_argument('--target-collection', default='', help='Target collection name (empty for scene collection)')
         parser.add_argument('--link-mode', default='instance', help='instance or individual')
         parser.add_argument('--dry-run', default='true', help='true or false')
         parser.add_argument('--hide-viewport', default='false', help='true or false')
