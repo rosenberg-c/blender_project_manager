@@ -213,6 +213,13 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_add_suffix_checkbox.stateChanged.connect(self._save_link_state)
         tab_layout.addWidget(self.link_add_suffix_checkbox)
 
+        # Auto-copy name option
+        self.link_auto_copy_name_checkbox = QCheckBox("Auto-copy name when selecting")
+        self.link_auto_copy_name_checkbox.setToolTip("Automatically copy the item name to target collection field when selecting a single item")
+        self.link_auto_copy_name_checkbox.setChecked(False)
+        self.link_auto_copy_name_checkbox.stateChanged.connect(self._save_link_state)
+        tab_layout.addWidget(self.link_auto_copy_name_checkbox)
+
         # Link as hidden option
         self.link_as_hidden_checkbox = QCheckBox("Link as hidden")
         self.link_as_hidden_checkbox.setToolTip(
@@ -354,6 +361,7 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_collection_input.setVisible(is_checked)
         self.link_copy_name_btn.setVisible(is_checked)
         self.link_add_suffix_checkbox.setVisible(is_checked)
+        self.link_auto_copy_name_checkbox.setVisible(is_checked)
         # Note: link_as_hidden_checkbox stays visible - it works for both modes
 
         # Save the preference
@@ -714,6 +722,9 @@ class LinkObjectsTab(BaseOperationTab):
             # Save hide instancer checkbox state
             link_state['hide_instancer'] = self.link_hide_instancer_checkbox.isChecked()
 
+            # Save auto-copy name checkbox state
+            link_state['auto_copy_name'] = self.link_auto_copy_name_checkbox.isChecked()
+
             config_data['link_operation'] = link_state
 
             # Write back to file
@@ -790,6 +801,10 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore hide instancer checkbox state
             hide_instancer = link_state.get('hide_instancer', False)
             self.link_hide_instancer_checkbox.setChecked(hide_instancer)
+
+            # Restore auto-copy name checkbox state
+            auto_copy_name = link_state.get('auto_copy_name', False)
+            self.link_auto_copy_name_checkbox.setChecked(auto_copy_name)
 
         except Exception as e:
             print(f"Warning: Could not restore link operation state: {e}")
@@ -881,6 +896,14 @@ class LinkObjectsTab(BaseOperationTab):
         selected_items = self.link_items_list.selectedItems()
         # Enable copy button only if exactly one item is selected
         self.link_copy_name_btn.setEnabled(len(selected_items) == 1)
+
+        # Auto-copy name if checkbox is checked and exactly one item is selected
+        if self.link_auto_copy_name_checkbox.isChecked() and len(selected_items) == 1:
+            item_data = selected_items[0].data(Qt.UserRole)
+            if item_data and "data" in item_data:
+                item_name = item_data["data"].get("name", "")
+                if item_name:
+                    self.link_collection_input.setText(item_name)
 
     def _copy_item_name_to_collection(self):
         """Copy the selected item name to the target collection field."""
