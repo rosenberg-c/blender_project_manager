@@ -1,7 +1,7 @@
 """Utilities tab for project cleanup operations."""
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox, QTabWidget, QDialog
+    QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget, QMessageBox, QTabWidget, QDialog, QApplication
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCursor
@@ -122,6 +122,23 @@ class UtilitiesTab(BaseOperationTab):
         self.remove_empty_dirs_btn.clicked.connect(self._remove_empty_directories)
         self.remove_empty_dirs_btn.setToolTip("Remove all empty directories from the project")
         tab_layout.addWidget(self.remove_empty_dirs_btn)
+
+        # Unused files section
+        unused_files_label = QLabel("<b>Unused Files:</b>")
+        tab_layout.addWidget(unused_files_label)
+
+        unused_files_desc = QLabel(
+            "Find files that are not referenced by any .blend file in your project. "
+            "This includes unused textures, .blend files, and backup files. "
+            "Useful for identifying files that can be safely removed to free up disk space."
+        )
+        unused_files_desc.setWordWrap(True)
+        tab_layout.addWidget(unused_files_desc)
+
+        self.find_unused_files_btn = QPushButton("Find Unused Files")
+        self.find_unused_files_btn.clicked.connect(self._find_unused_files)
+        self.find_unused_files_btn.setToolTip("Scan project for files not referenced by any .blend file")
+        tab_layout.addWidget(self.find_unused_files_btn)
 
         # Add stretch to push everything to top
         tab_layout.addStretch()
@@ -379,6 +396,56 @@ class UtilitiesTab(BaseOperationTab):
 
         except Exception as e:
             self.show_error(TITLE_ERROR, TMPL_FAILED_REMOVE_DIRS.format(error=str(e)))
+
+    def _find_unused_files(self):
+        """Find files not referenced by any .blend file."""
+        if not self.controller.project.is_open:
+            self.show_warning(TITLE_NO_PROJECT, MSG_OPEN_PROJECT_FIRST)
+            return
+
+        try:
+            from gui.progress_dialog import OperationProgressDialog
+
+            project_root = self.get_project_root()
+
+            # Create and show progress dialog
+            progress_dialog = OperationProgressDialog("Finding Unused Files", self)
+            progress_dialog.show()
+
+            # Run scan
+            result = None
+
+            def progress_callback(percent, message):
+                progress_dialog.update_progress(percent, message)
+                progress_dialog.log_text.append(message)
+
+            try:
+                result = self.controller.project.blender_service.find_unused_files(
+                    project_root,
+                    include_backups=True,
+                    progress_callback=progress_callback
+                )
+
+                if result and result.get("success", False):
+                    progress_dialog.update_progress(100, "Scan complete!")
+                    progress_dialog.exec()
+
+                    # Show results dialog
+                    from gui.unused_files_dialog import UnusedFilesDialog
+
+                    dialog = UnusedFilesDialog(result, project_root, self)
+                    dialog.exec()
+                else:
+                    errors = result.get("errors", ["Unknown error"]) if result else ["Unknown error"]
+                    progress_dialog.mark_error("\n".join(errors[:3]))
+                    progress_dialog.exec()
+
+            except Exception as e:
+                progress_dialog.mark_error(str(e))
+                progress_dialog.exec()
+
+        except Exception as e:
+            self.show_error("Error", f"Failed to find unused files: {str(e)}")
 
     def _reload_libraries(self):
         """Reload all library links in .blend files in the project."""

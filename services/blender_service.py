@@ -1245,3 +1245,154 @@ class BlenderService:
                 message=f"Operation failed: {str(e)}",
                 errors=[str(e)]
             )
+
+    def find_unused_files(
+        self,
+        project_root: Path,
+        include_backups: bool = True,
+        progress_callback: Optional[Callable[[int, str], None]] = None
+    ) -> dict:
+        """Find files in project that are not referenced by any .blend file.
+
+        Args:
+            project_root: Path to project root directory
+            include_backups: If True, include .blend1, .blend2 backup files
+            progress_callback: Optional callback(percentage, message)
+
+        Returns:
+            Dictionary with unused files information
+        """
+        def report_progress(pct: int, msg: str):
+            if progress_callback:
+                progress_callback(pct, msg)
+
+        try:
+            from core.file_scanner import find_blend_files, find_texture_files, find_backup_files
+
+            report_progress(10, "Scanning for all .blend files...")
+
+            # Step 1: Run Blender script to scan all references
+            script_path = Path(__file__).parent.parent / "blender_lib" / "scan_all_references.py"
+
+            result = self.runner.run_script(
+                script_path,
+                {
+                    "project-root": str(project_root)
+                },
+                timeout=300  # 5 minutes for large projects
+            )
+
+            scan_result = extract_json_from_output(result.stdout)
+
+            if not scan_result.get("success", False):
+                errors = scan_result.get("errors", ["Unknown error"])
+                return {
+                    "success": False,
+                    "errors": errors,
+                    "unused_files": [],
+                    "total_unused_size": 0
+                }
+
+            report_progress(50, "Building file inventory...")
+
+            # Step 2: Get all referenced files
+            referenced_files = set(scan_result.get("all_referenced_files", []))
+
+            # Step 3: Find all files in project
+            all_project_files = set()
+
+            # Add texture files
+            texture_files = find_texture_files(project_root)
+            for f in texture_files:
+                all_project_files.add(str(f.resolve()))
+
+            # Add blend files
+            blend_files = find_blend_files(project_root)
+            for f in blend_files:
+                all_project_files.add(str(f.resolve()))
+
+            # Optionally add backup files
+            if include_backups:
+                backup_files = find_backup_files(project_root)
+                for f in backup_files:
+                    all_project_files.add(str(f.resolve()))
+
+            report_progress(75, "Comparing files...")
+
+            # Step 4: Find unused files (in project but not referenced)
+            unused_file_paths = all_project_files - referenced_files
+
+            # Step 5: Build detailed unused files list
+            unused_files = []
+            unused_by_type = {"texture": 0, "blend": 0, "backup": 0}
+            total_size = 0
+
+            texture_exts = {'.png', '.jpg', '.jpeg', '.exr', '.hdr', '.tif', '.tiff', '.bmp', '.tga'}
+            backup_exts = {'.blend1', '.blend2', '.blend3'}
+
+            for file_path_str in unused_file_paths:
+                file_path = Path(file_path_str)
+
+                if not file_path.exists():
+                    continue
+
+                try:
+                    file_size = file_path.stat().st_size
+                    total_size += file_size
+
+                    # Determine file type
+                    ext = file_path.suffix.lower()
+                    if ext in texture_exts:
+                        file_type = "texture"
+                        unused_by_type["texture"] += 1
+                    elif ext in backup_exts:
+                        file_type = "backup"
+                        unused_by_type["backup"] += 1
+                    elif ext == '.blend':
+                        file_type = "blend"
+                        unused_by_type["blend"] += 1
+                    else:
+                        file_type = "other"
+
+                    # Get relative path from project root
+                    try:
+                        rel_path = file_path.relative_to(project_root)
+                    except ValueError:
+                        rel_path = file_path
+
+                    unused_files.append({
+                        "path": str(file_path),
+                        "name": file_path.name,
+                        "type": file_type,
+                        "size": file_size,
+                        "relative_path": str(rel_path)
+                    })
+
+                except Exception as e:
+                    # Skip files that can't be accessed
+                    continue
+
+            # Sort by size (largest first)
+            unused_files.sort(key=lambda x: x["size"], reverse=True)
+
+            report_progress(100, "Complete!")
+
+            return {
+                "success": True,
+                "total_files_in_project": len(all_project_files),
+                "total_referenced_files": len(referenced_files),
+                "unused_files": unused_files,
+                "unused_by_type": unused_by_type,
+                "total_unused_size": total_size,
+                "blend_files_scanned": scan_result.get("blend_files_scanned", 0),
+                "errors": scan_result.get("errors", []),
+                "warnings": scan_result.get("warnings", [])
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "errors": [f"Failed to find unused files: {str(e)}"],
+                "unused_files": [],
+                "total_unused_size": 0
+            }
