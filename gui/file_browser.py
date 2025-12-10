@@ -48,6 +48,15 @@ class FileSystemProxyModel(QSortFilterProxyModel):
         super().__init__(parent)
         self.search_text = ""
         self.file_system_model = None
+        self.project_root = None
+
+    def set_project_root(self, root_path: Path):
+        """Set the project root path to enforce boundaries.
+
+        Args:
+            root_path: Project root directory path
+        """
+        self.project_root = root_path
 
     def set_search_text(self, text: str):
         """Set the search filter text.
@@ -55,8 +64,29 @@ class FileSystemProxyModel(QSortFilterProxyModel):
         Args:
             text: Search text to filter by
         """
-        self.search_text = text.lower()
-        self.invalidateFilter()
+        # Strip leading/trailing whitespace to prevent issues with space at start
+        self.search_text = text.strip().lower()
+        self.invalidate()
+
+    def _is_within_project_root(self, file_path: Path) -> bool:
+        """Check if a path is within the project root.
+
+        Args:
+            file_path: Path to check
+
+        Returns:
+            True if path is within project root or no project root is set
+        """
+        if not self.project_root:
+            return True
+
+        try:
+            # Check if file_path is relative to project_root
+            file_path.relative_to(self.project_root)
+            return True
+        except ValueError:
+            # Path is not relative to project_root
+            return False
 
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
         """Determine if a row should be shown based on search filter.
@@ -85,10 +115,77 @@ class FileSystemProxyModel(QSortFilterProxyModel):
         # Get the file path
         file_path = Path(source_model.filePath(index))
 
-        # Check if this item's name matches the search
-        # With recursive filtering enabled, Qt will automatically show
-        # parent directories if any descendant matches
-        return self.search_text in file_path.name.lower()
+        # CRITICAL: Never show anything outside the project path
+        if not self._is_within_project_root(file_path):
+            return False
+
+        # Check if this item matches
+        if self.search_text in file_path.name.lower():
+            return True
+
+        # If this is a directory, check if any children match
+        if file_path.is_dir():
+            return self._has_matching_children(index, source_model)
+
+        return False
+
+    def _has_matching_children(self, parent_index: QModelIndex, source_model) -> bool:
+        """Recursively check if any children match the search.
+
+        Args:
+            parent_index: Parent index to check
+            source_model: Source file system model
+
+        Returns:
+            True if any descendant matches the search
+        """
+        # Get the directory path and check directly on filesystem
+        # QFileSystemModel loads asynchronously, so we can't rely on rowCount
+        parent_path = Path(source_model.filePath(parent_index))
+
+        if not parent_path.is_dir():
+            return False
+
+        # CRITICAL: Ensure parent_path is within project root before searching
+        if not self._is_within_project_root(parent_path):
+            return False
+
+        try:
+            # Check all items in the directory recursively
+            # IMPORTANT: Only search within project boundaries
+            for item in parent_path.rglob('*'):
+                # CRITICAL: Validate each item is within project root
+                if not self._is_within_project_root(item):
+                    continue
+
+                if self.search_text in item.name.lower():
+                    return True
+        except (PermissionError, OSError):
+            # If we can't access the directory, fall back to Qt model
+            pass
+
+        # Fallback to Qt model (for already loaded directories)
+        for row in range(source_model.rowCount(parent_index)):
+            child_index = source_model.index(row, 0, parent_index)
+            if not child_index.isValid():
+                continue
+
+            file_path = Path(source_model.filePath(child_index))
+
+            # CRITICAL: Never check paths outside project root
+            if not self._is_within_project_root(file_path):
+                continue
+
+            # Check if child matches
+            if self.search_text in file_path.name.lower():
+                return True
+
+            # If child is a directory, check its children
+            if file_path.is_dir():
+                if self._has_matching_children(child_index, source_model):
+                    return True
+
+        return False
 
 
 class FileItemDelegate(QStyledItemDelegate):
@@ -386,6 +483,9 @@ class FileBrowserWidget(QWidget):
         Args:
             path: Root directory path
         """
+        # CRITICAL: Set project root on proxy model to enforce boundaries
+        self.proxy_model.set_project_root(path)
+
         root_index = self.file_system_model.setRootPath(str(path))
         proxy_root_index = self.proxy_model.mapFromSource(root_index)
         self.tree.setRootIndex(proxy_root_index)
@@ -429,6 +529,10 @@ class FileBrowserWidget(QWidget):
         Args:
             text: Search text entered by user
         """
+        # CRITICAL: Ensure project root is set before filtering
+        if self.project.is_open and self.project.project_root:
+            self.proxy_model.set_project_root(self.project.project_root)
+
         self.proxy_model.set_search_text(text)
         self.clear_search_btn.setEnabled(bool(text))
 
