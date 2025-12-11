@@ -192,7 +192,7 @@ class TestUnusedFilesDialog:
     def test_hide_file_functionality(self, qapp, tmp_path):
         """Test that files can be hidden and unhidden."""
         from gui.unused_files_dialog import UnusedFilesDialog
-        from PySide6.QtWidgets import QPushButton
+        from PySide6.QtWidgets import QCheckBox
 
         results = {
             "success": True,
@@ -230,17 +230,18 @@ class TestUnusedFilesDialog:
         assert len(dialog.hidden_files) == 0
         assert dialog.table.isRowHidden(0) == False
 
-        # Get hide button for first row
-        hide_btn = dialog.table.cellWidget(0, 5)
-        assert isinstance(hide_btn, QPushButton)
-        assert hide_btn.text() == "Hide"
+        # Get hide checkbox for first row
+        hide_checkbox_widget = dialog.table.cellWidget(0, 5)
+        hide_checkbox = hide_checkbox_widget.findChild(QCheckBox)
+        assert hide_checkbox is not None
+        assert hide_checkbox.isChecked() == False
 
-        # Click hide button
-        hide_btn.click()
+        # Check the checkbox to hide the file
+        hide_checkbox.setChecked(True)
 
         # File should now be hidden
         assert "/test/texture.png" in dialog.hidden_files
-        assert hide_btn.text() == "Unhide"
+        assert hide_checkbox.isChecked() == True
         assert dialog.table.isRowHidden(0) == True  # Hidden by default
 
         # Enable show hidden files
@@ -251,17 +252,18 @@ class TestUnusedFilesDialog:
         dialog.show_hidden_check.setChecked(False)
         assert dialog.table.isRowHidden(0) == True  # Hidden again
 
-        # Click unhide button
-        hide_btn.click()
+        # Uncheck the checkbox to unhide the file
+        hide_checkbox.setChecked(False)
 
         # File should no longer be hidden
         assert "/test/texture.png" not in dialog.hidden_files
-        assert hide_btn.text() == "Hide"
+        assert hide_checkbox.isChecked() == False
         assert dialog.table.isRowHidden(0) == False
 
     def test_hidden_files_persistence(self, qapp, tmp_path):
         """Test that hidden files are persisted to config file."""
         from gui.unused_files_dialog import UnusedFilesDialog
+        from PySide6.QtWidgets import QCheckBox
 
         config_file = tmp_path / "config.json"
 
@@ -297,8 +299,9 @@ class TestUnusedFilesDialog:
 
         # Create first dialog and hide a file
         dialog1 = UnusedFilesDialog(results, project_root, config_file)
-        hide_btn = dialog1.table.cellWidget(0, 5)
-        hide_btn.click()
+        hide_checkbox_widget = dialog1.table.cellWidget(0, 5)
+        hide_checkbox = hide_checkbox_widget.findChild(QCheckBox)
+        hide_checkbox.setChecked(True)
 
         # Verify config file contains hidden files
         assert config_file.exists()
@@ -313,8 +316,9 @@ class TestUnusedFilesDialog:
         dialog2 = UnusedFilesDialog(results, project_root, config_file)
 
         assert "/test/texture.png" in dialog2.hidden_files
-        hide_btn2 = dialog2.table.cellWidget(0, 5)
-        assert hide_btn2.text() == "Unhide"
+        hide_checkbox_widget2 = dialog2.table.cellWidget(0, 5)
+        hide_checkbox2 = hide_checkbox_widget2.findChild(QCheckBox)
+        assert hide_checkbox2.isChecked() == True
         assert dialog2.table.isRowHidden(0) == True
 
     def test_show_hidden_checkbox_persistence(self, qapp, tmp_path):

@@ -145,7 +145,7 @@ class UnusedFilesDialog(QDialog):
             # Table with unused files
             self.table = QTableWidget()
             self.table.setColumnCount(6)
-            self.table.setHorizontalHeaderLabels(["", "File Name", "Type", "Size", "Location", ""])
+            self.table.setHorizontalHeaderLabels(["", "File Name", "Type", "Size", "Location", "Hide"])
             self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
             self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
             self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
@@ -226,11 +226,15 @@ class UnusedFilesDialog(QDialog):
             location_item = QTableWidgetItem(file_info["relative_path"])
             self.table.setItem(row, 4, location_item)
 
-            # Hide button
-            hide_btn = QPushButton("Hide")
-            hide_btn.setMaximumWidth(60)
-            hide_btn.clicked.connect(lambda checked, r=row: self._toggle_hide_file(r))
-            self.table.setCellWidget(row, 5, hide_btn)
+            # Hide checkbox
+            hide_checkbox = QCheckBox()
+            hide_checkbox_widget = QWidget()
+            hide_checkbox_layout = QHBoxLayout(hide_checkbox_widget)
+            hide_checkbox_layout.addWidget(hide_checkbox)
+            hide_checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            hide_checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            hide_checkbox.stateChanged.connect(lambda state, r=row: self._toggle_hide_file(r))
+            self.table.setCellWidget(row, 5, hide_checkbox_widget)
 
     def _on_checkbox_changed(self):
         """Handle checkbox state changes."""
@@ -250,28 +254,22 @@ class UnusedFilesDialog(QDialog):
         file_info = name_item.data(Qt.ItemDataRole.UserRole)
         file_path = file_info["path"]
 
-        # Toggle hidden status
-        if file_path in self.hidden_files:
-            self.hidden_files.remove(file_path)
-        else:
-            self.hidden_files.add(file_path)
+        # Get checkbox state
+        hide_checkbox_widget = self.table.cellWidget(row, 5)
+        if hide_checkbox_widget:
+            hide_checkbox = hide_checkbox_widget.findChild(QCheckBox)
+            if hide_checkbox:
+                # Update hidden status based on checkbox state
+                if hide_checkbox.isChecked():
+                    self.hidden_files.add(file_path)
+                else:
+                    self.hidden_files.discard(file_path)
 
-        # Update button text
-        hide_btn = self.table.cellWidget(row, 5)
-        if hide_btn and isinstance(hide_btn, QPushButton):
-            if file_path in self.hidden_files:
-                hide_btn.setText("Unhide")
-                # Set style to indicate it's hidden
-                hide_btn.setStyleSheet("background-color: #4CAF50; color: white;")
-            else:
-                hide_btn.setText("Hide")
-                hide_btn.setStyleSheet("")
+                # Apply filters to show/hide row
+                self._apply_filters()
 
-        # Apply filters to show/hide row
-        self._apply_filters()
-
-        # Save state
-        self._save_state()
+                # Save state
+                self._save_state()
 
     def _apply_filters(self):
         """Apply type filters and hidden status to table rows."""
@@ -464,8 +462,8 @@ class UnusedFilesDialog(QDialog):
             if hasattr(self, 'show_hidden_check'):
                 self.show_hidden_check.setChecked(dialog_state.get('show_hidden', False))
 
-            # Update hide button states for hidden files
-            self._update_hide_buttons()
+            # Update hide checkbox states for hidden files
+            self._update_hide_checkboxes()
 
             # Apply filters to hide rows based on restored state
             self._apply_filters()
@@ -473,19 +471,19 @@ class UnusedFilesDialog(QDialog):
         except Exception as e:
             print(f"Warning: Could not restore unused files dialog state: {e}")
 
-    def _update_hide_buttons(self):
-        """Update all hide button texts and styles based on hidden status."""
+    def _update_hide_checkboxes(self):
+        """Update all hide checkbox states based on hidden status."""
         for row in range(self.table.rowCount()):
             name_item = self.table.item(row, 1)
             if name_item:
                 file_info = name_item.data(Qt.ItemDataRole.UserRole)
                 file_path = file_info["path"]
 
-                hide_btn = self.table.cellWidget(row, 5)
-                if hide_btn and isinstance(hide_btn, QPushButton):
-                    if file_path in self.hidden_files:
-                        hide_btn.setText("Unhide")
-                        hide_btn.setStyleSheet("background-color: #4CAF50; color: white;")
-                    else:
-                        hide_btn.setText("Hide")
-                        hide_btn.setStyleSheet("")
+                hide_checkbox_widget = self.table.cellWidget(row, 5)
+                if hide_checkbox_widget:
+                    hide_checkbox = hide_checkbox_widget.findChild(QCheckBox)
+                    if hide_checkbox:
+                        # Block signals to avoid triggering _toggle_hide_file
+                        hide_checkbox.blockSignals(True)
+                        hide_checkbox.setChecked(file_path in self.hidden_files)
+                        hide_checkbox.blockSignals(False)
