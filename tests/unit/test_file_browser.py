@@ -487,3 +487,83 @@ class TestFileBrowserDelete:
         # Test that parent directory is within bounds
         assert browser.proxy_model._is_within_project_root(project_root) == True
         assert browser.proxy_model._is_within_project_root(tmp_path) == False
+
+    def test_search_shows_files_in_matching_directory(self, qapp, tmp_path):
+        """Test that searching for a directory name shows all files within it."""
+        from pathlib import Path
+
+        # Create test project structure with nested directories
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        # Create a directory that will match the search
+        assets_dir = project_root / "assets"
+        assets_dir.mkdir()
+        (assets_dir / "texture1.png").write_text("test")
+        (assets_dir / "model.blend").write_text("test")
+
+        # Create another directory that won't match
+        scripts_dir = project_root / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "script.py").write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = project_root
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+        browser.set_root(project_root)
+
+        # Set search text to "assets" - should show the assets dir and all files in it
+        browser.proxy_model.set_search_text("assets")
+
+        # Check that files inside the matching directory are shown
+        texture_path = assets_dir / "texture1.png"
+        model_path = assets_dir / "model.blend"
+        script_path = scripts_dir / "script.py"
+
+        # Files in "assets" directory should match because their parent matches
+        assert browser.proxy_model._has_matching_ancestor(texture_path) == True
+        assert browser.proxy_model._has_matching_ancestor(model_path) == True
+
+        # File in "scripts" directory should not match
+        assert browser.proxy_model._has_matching_ancestor(script_path) == False
+
+    def test_search_shows_files_in_nested_matching_directory(self, qapp, tmp_path):
+        """Test that searching works with deeply nested directories."""
+        from pathlib import Path
+
+        # Create test project structure with deeply nested directories
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+
+        # Create nested structure: project/models/characters/hero/textures/
+        models_dir = project_root / "models"
+        models_dir.mkdir()
+        characters_dir = models_dir / "characters"
+        characters_dir.mkdir()
+        hero_dir = characters_dir / "hero"
+        hero_dir.mkdir()
+        textures_dir = hero_dir / "textures"
+        textures_dir.mkdir()
+        (textures_dir / "diffuse.png").write_text("test")
+
+        # Mock project controller
+        mock_controller = MagicMock()
+        mock_controller.is_open = True
+        mock_controller.project_root = project_root
+
+        from gui.file_browser import FileBrowserWidget
+
+        browser = FileBrowserWidget(mock_controller)
+        browser.set_root(project_root)
+
+        # Search for "hero" - should show all descendant files
+        browser.proxy_model.set_search_text("hero")
+
+        # File deep in the hierarchy should match because ancestor matches
+        diffuse_path = textures_dir / "diffuse.png"
+        assert browser.proxy_model._has_matching_ancestor(diffuse_path) == True

@@ -88,6 +88,34 @@ class FileSystemProxyModel(QSortFilterProxyModel):
             # Path is not relative to project_root
             return False
 
+    def _has_matching_ancestor(self, file_path: Path) -> bool:
+        """Check if any ancestor directory matches the search text.
+
+        Args:
+            file_path: Path to check
+
+        Returns:
+            True if any ancestor directory name matches the search
+        """
+        if not self.project_root:
+            return False
+
+        # Check each parent directory from current to project root
+        current = file_path.parent
+        while current != current.parent:  # Stop at filesystem root
+            # Don't go above project root
+            if not self._is_within_project_root(current):
+                break
+
+            # Check if this parent directory matches
+            if self.search_text in current.name.lower():
+                return True
+
+            # Move to next parent
+            current = current.parent
+
+        return False
+
     def filterAcceptsRow(self, source_row: int, source_parent: QModelIndex) -> bool:
         """Determine if a row should be shown based on search filter.
 
@@ -121,6 +149,10 @@ class FileSystemProxyModel(QSortFilterProxyModel):
 
         # Check if this item matches
         if self.search_text in file_path.name.lower():
+            return True
+
+        # Check if any ancestor directory matches (show all files in matching dirs)
+        if self._has_matching_ancestor(file_path):
             return True
 
         # If this is a directory, check if any children match
