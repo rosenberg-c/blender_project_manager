@@ -151,6 +151,13 @@ class LinkObjectsTab(BaseOperationTab):
         items_label = QLabel("Select items to link:")
         tab_layout.addWidget(items_label)
 
+        # Filter input for searching items
+        self.link_filter_input = QLineEdit()
+        self.link_filter_input.setPlaceholderText("Filter items by name...")
+        self.link_filter_input.textChanged.connect(self._filter_items_by_name)
+        self.link_filter_input.setClearButtonEnabled(True)
+        tab_layout.addWidget(self.link_filter_input)
+
         self.link_items_list = QListWidget()
         self.link_items_list.setSelectionMode(QListWidget.ExtendedSelection)
         self.link_items_list.itemSelectionChanged.connect(self._on_link_item_selection_changed)
@@ -289,6 +296,7 @@ class LinkObjectsTab(BaseOperationTab):
                 self.link_load_btn.setEnabled(True)
                 # Clear previous items when source changes
                 self.link_items_list.clear()
+                self.link_filter_input.clear()
                 self.link_source_data = {"objects": [], "collections": []}
             else:
                 # Non-.blend file selected, clear source
@@ -298,6 +306,7 @@ class LinkObjectsTab(BaseOperationTab):
                 self.link_source_scene_combo.setEnabled(False)
                 self.link_load_btn.setEnabled(False)
                 self.link_items_list.clear()
+                self.link_filter_input.clear()
                 self.link_source_data = {"objects": [], "collections": []}
         else:
             # Target is not locked - selected file becomes TARGET
@@ -512,10 +521,34 @@ class LinkObjectsTab(BaseOperationTab):
                         item.setData(Qt.UserRole, {"type": "collection", "data": col})
                         self.link_items_list.addItem(item)
 
+        # Apply name filter if there is one
+        self._filter_items_by_name()
+
     def _filter_link_items_list(self):
         """Filter the items list based on combo box selection."""
         if isinstance(self.link_source_data, dict) and (self.link_source_data.get("objects") or self.link_source_data.get("collections")):
             self._populate_link_items_list()
+
+    def _filter_items_by_name(self):
+        """Filter list items based on name filter input."""
+        filter_text = self.link_filter_input.text().strip().lower()
+
+        # Show/hide items based on filter text
+        for i in range(self.link_items_list.count()):
+            item = self.link_items_list.item(i)
+            if not filter_text:
+                # No filter - show all items
+                item.setHidden(False)
+            else:
+                # Get item data to check the actual name
+                item_data = item.data(Qt.UserRole)
+                if item_data and "data" in item_data:
+                    item_name = item_data["data"].get("name", "").lower()
+                    # Show item if name contains filter text
+                    item.setHidden(filter_text not in item_name)
+                else:
+                    # If no data, hide the item
+                    item.setHidden(True)
 
     def _preview_link(self):
         """Preview the link operation."""
