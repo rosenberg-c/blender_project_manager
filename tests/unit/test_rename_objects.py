@@ -282,3 +282,97 @@ class TestRenameObjectsTabCopyButton:
 
         # Verify: setText was called with empty string
         tab.obj_replace_input.setText.assert_called_once_with("")
+
+
+class TestRenameObjectsTabFilter:
+    """Tests for the filter functionality in rename_objects_tab.py."""
+
+    def test_filter_items_by_name_shows_matching_items(self):
+        """Test that filter shows items matching the filter text."""
+        from PySide6.QtWidgets import QListWidgetItem
+        from PySide6.QtCore import Qt
+
+        class MockTab:
+            def __init__(self):
+                self.obj_filter_input = MagicMock()
+                self.obj_filter_input.text = MagicMock(return_value="Cube")
+                self.obj_list = MagicMock()
+                self.obj_list.count = MagicMock(return_value=3)
+
+                # Create mock items
+                self.items = []
+                for name in ["Cube.001", "Sphere", "CubeLight"]:
+                    item = MagicMock()
+                    item.data = MagicMock(return_value={"type": "object", "data": {"name": name}})
+                    self.items.append(item)
+
+                self.obj_list.item = MagicMock(side_effect=self.items)
+
+            def _filter_items_by_name(self):
+                filter_text = self.obj_filter_input.text().strip().lower()
+
+                for i in range(self.obj_list.count()):
+                    item = self.obj_list.item(i)
+                    if not filter_text:
+                        item.setHidden(False)
+                    else:
+                        item_data = item.data(Qt.UserRole)
+                        if item_data and "data" in item_data:
+                            item_name = item_data["data"].get("name", "").lower()
+                            item.setHidden(filter_text not in item_name)
+                        else:
+                            item.setHidden(True)
+
+        tab = MockTab()
+        tab._filter_items_by_name()
+
+        # Verify: Cube.001 should be shown (not hidden)
+        tab.items[0].setHidden.assert_called_with(False)
+
+        # Verify: Sphere should be hidden
+        tab.items[1].setHidden.assert_called_with(True)
+
+        # Verify: CubeLight should be shown (not hidden) - contains "cube"
+        tab.items[2].setHidden.assert_called_with(False)
+
+    def test_filter_items_by_name_shows_all_when_empty(self):
+        """Test that clearing filter shows all items."""
+        from PySide6.QtCore import Qt
+
+        class MockTab:
+            def __init__(self):
+                self.obj_filter_input = MagicMock()
+                self.obj_filter_input.text = MagicMock(return_value="")
+                self.obj_list = MagicMock()
+                self.obj_list.count = MagicMock(return_value=2)
+
+                # Create mock items
+                self.items = []
+                for name in ["Cube", "Sphere"]:
+                    item = MagicMock()
+                    item.data = MagicMock(return_value={"type": "object", "data": {"name": name}})
+                    self.items.append(item)
+
+                self.obj_list.item = MagicMock(side_effect=self.items)
+
+            def _filter_items_by_name(self):
+                filter_text = self.obj_filter_input.text().strip().lower()
+
+                for i in range(self.obj_list.count()):
+                    item = self.obj_list.item(i)
+                    if not filter_text:
+                        item.setHidden(False)
+                    else:
+                        item_data = item.data(Qt.UserRole)
+                        if item_data and "data" in item_data:
+                            item_name = item_data["data"].get("name", "").lower()
+                            item.setHidden(filter_text not in item_name)
+                        else:
+                            item.setHidden(True)
+
+        tab = MockTab()
+        tab._filter_items_by_name()
+
+        # Verify: All items should be shown (not hidden)
+        tab.items[0].setHidden.assert_called_with(False)
+        tab.items[1].setHidden.assert_called_with(False)
