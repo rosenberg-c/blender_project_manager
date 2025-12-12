@@ -27,7 +27,7 @@ def main():
     app.setApplicationVersion("0.1.0")
 
     # Set application icon
-    icon_path = Path(__file__).parent / 'resources' / 'icons' / 'app_icon.svg'
+    icon_path = Path(__file__).parent / 'resources' / 'icons' / 'app_icon_current.svg'
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
