@@ -5,7 +5,7 @@
    viewBox="0 0 256 256"
    version="1.1"
    id="svg4"
-   sodipodi:docname="app_icon-2.svg"
+   sodipodi:docname="app_icon_current.svg"
    inkscape:version="1.4 (e7c3feb1, 2024-10-09)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -22,9 +22,9 @@
      inkscape:pageopacity="0.0"
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
-     inkscape:zoom="1.0705097"
-     inkscape:cx="119.56921"
-     inkscape:cy="187.76103"
+     inkscape:zoom="1.3609012"
+     inkscape:cx="72.011105"
+     inkscape:cy="188.84545"
      inkscape:window-width="1400"
      inkscape:window-height="747"
      inkscape:window-x="0"
@@ -33,31 +33,31 @@
      inkscape:current-layer="svg4" />
   <!-- Background rounded square -->
   <rect
-     x="10"
-     y="10"
-     width="236"
-     height="236"
-     rx="40"
-     ry="40"
+     x="21.355652"
+     y="21.355652"
+     width="213.2887"
+     height="213.2887"
+     rx="36.150627"
+     ry="36.150627"
      fill="#5B7C99"
-     stroke="#4A6B85"
+     stroke="#4a6b85"
      stroke-width="3"
      id="rect1"
      style="fill:#343434;fill-opacity:1" />
   <!-- Folder base -->
   <path
-     d="M 40 70 L 40 190 C 40 198 46 204 54 204 L 202 204 C 210 204 216 198 216 190 L 216 90 C 216 82 210 76 202 76 L 140 76 L 120 56 C 118 54 115 52 112 52 L 54 52 C 46 52 40 58 40 66 Z"
+     d="m 57.392472,81.46322 v 96.28299 c 0,6.41887 4.81415,11.23302 11.233016,11.23302 H 187.37451 c 6.41886,0 11.23302,-4.81415 11.23302,-11.23302 V 97.510385 c 0,-6.418867 -4.81416,-11.233016 -11.23302,-11.233016 H 137.6283 L 121.58113,70.230205 c -1.60471,-1.604717 -4.01178,-3.209434 -6.41886,-3.209434 H 68.625488 c -6.418866,0 -11.233016,4.81415 -11.233016,11.233016 z"
      fill="#F59E52"
      stroke="#D97F3D"
-     stroke-width="3"
+     stroke-width="2.40708"
      id="path1"
      style="fill:#e87c0c;fill-opacity:1;stroke:#e87c0c;stroke-opacity:1" />
   <!-- Folder tab -->
   <path
-     d="M 40 70 L 40 66 C 40 58 46 52 54 52 L 112 52 C 115 52 118 54 120 56 L 140 76 L 216 76 L 216 90 L 40 90 Z"
+     d="m 57.392472,80.646932 v -3.209433 c 0,-6.418866 4.81415,-11.233016 11.233016,-11.233016 h 46.536782 c 2.40708,0 4.81415,1.604717 6.41886,3.209434 l 16.04717,16.047164 h 60.97923 V 96.6941 H 57.392472 Z"
      fill="#FFB570"
-     stroke="#D97F3D"
-     stroke-width="3"
+     stroke="#d97f3d"
+     stroke-width="2.78495"
      id="path2"
      style="fill:#f69a3c;fill-opacity:1" />
   <!-- File/document icons inside folder -->
