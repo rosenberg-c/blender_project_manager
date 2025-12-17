@@ -1,11 +1,12 @@
 """Rename Objects/Collections tab for bulk renaming within .blend files."""
 
+import json
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QWidget, QListWidget, QListWidgetItem, QComboBox
+    QScrollArea, QWidget, QListWidget, QListWidgetItem, QComboBox, QCheckBox
 )
 
 from gui.operations.base_tab import BaseOperationTab
@@ -23,16 +24,19 @@ from services.blender_service import extract_json_from_output
 class RenameObjectsTab(BaseOperationTab):
     """Tab for renaming objects and collections within a .blend file."""
 
-    def __init__(self, controller, parent=None):
+    def __init__(self, controller, parent=None, config_file: Path = None):
         """Initialize rename objects tab.
 
         Args:
             controller: File operations controller
             parent: Parent widget (operations panel)
+            config_file: Path to config file for state persistence
         """
         super().__init__(controller, parent)
+        self.config_file = config_file
         self.obj_list_data = {"objects": [], "collections": [], "materials": []}
         self.setup_ui()
+        self._restore_state()
 
     def setup_ui(self):
         """Create the UI for the rename objects tab."""
@@ -51,6 +55,12 @@ class RenameObjectsTab(BaseOperationTab):
         desc_label = QLabel("Select items from the .blend file to rename.")
         desc_label.setWordWrap(True)
         tab_layout.addWidget(desc_label)
+
+        # Auto-load checkbox
+        self.obj_auto_load_checkbox = QCheckBox("Auto load scenes and items when file is selected")
+        self.obj_auto_load_checkbox.setToolTip("Automatically load scenes and items when a .blend file is selected (only when this tab is visible)")
+        self.obj_auto_load_checkbox.stateChanged.connect(self._on_auto_load_changed)
+        tab_layout.addWidget(self.obj_auto_load_checkbox)
 
         tab_layout.addSpacing(5)
 
@@ -179,6 +189,11 @@ class RenameObjectsTab(BaseOperationTab):
             self.obj_list.clear()
             self.obj_filter_input.clear()
             self.obj_list_data = {"objects": [], "collections": [], "materials": []}
+
+            # Auto-load if checkbox is checked AND this tab is visible
+            if self.obj_auto_load_checkbox.isChecked() and self.isVisible():
+                self._load_scenes_for_rename()
+                self._load_objects()
         else:
             self.obj_scene_combo.clear()
             self.obj_scene_combo.setEnabled(False)
@@ -606,3 +621,49 @@ class RenameObjectsTab(BaseOperationTab):
 
         title = "Preview Results" if dry_run else "Rename Complete"
         self.show_info(title, "".join(message_parts))
+
+    def _on_auto_load_changed(self, state: int):
+        """Handle auto-load checkbox state change."""
+        self._save_state()
+
+    def _save_state(self):
+        """Save rename objects tab state."""
+        if not self.config_file:
+            return
+
+        try:
+            # Load existing config
+            config_data = {}
+            if self.config_file.exists():
+                with open(self.config_file, 'r') as f:
+                    config_data = json.load(f)
+
+            # Save auto-load checkbox state
+            rename_state = {
+                'auto_load': self.obj_auto_load_checkbox.isChecked()
+            }
+            config_data['rename_objects'] = rename_state
+
+            with open(self.config_file, 'w') as f:
+                json.dump(config_data, f, indent=2)
+
+        except Exception as e:
+            print(f"Warning: Could not save rename objects state: {e}")
+
+    def _restore_state(self):
+        """Restore rename objects tab state."""
+        if not self.config_file or not self.config_file.exists():
+            return
+
+        try:
+            with open(self.config_file, 'r') as f:
+                config_data = json.load(f)
+
+            rename_state = config_data.get('rename_objects', {})
+
+            # Restore auto-load checkbox
+            auto_load = rename_state.get('auto_load', False)
+            self.obj_auto_load_checkbox.setChecked(auto_load)
+
+        except Exception as e:
+            print(f"Warning: Could not restore rename objects state: {e}")

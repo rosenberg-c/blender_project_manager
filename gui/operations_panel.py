@@ -60,7 +60,7 @@ class OperationsPanelWidget(QWidget):
 
         # Create tab instances
         self.move_tab = MoveRenameTab(self.controller, self)
-        self.rename_tab = RenameObjectsTab(self.controller, self)
+        self.rename_tab = RenameObjectsTab(self.controller, self, self.config_file)
         self.link_tab = LinkObjectsTab(self.controller, self, self.config_file)
         self.utilities_tab = UtilitiesTab(self.controller, self)
 
