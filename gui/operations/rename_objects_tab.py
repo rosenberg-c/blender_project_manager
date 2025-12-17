@@ -61,9 +61,13 @@ class RenameObjectsTab(BaseOperationTab):
 
         self.obj_scene_combo = QComboBox()
         self.obj_scene_combo.setEnabled(False)
-        scene_layout.addWidget(self.obj_scene_combo)
+        scene_layout.addWidget(self.obj_scene_combo, stretch=1)
 
-        scene_layout.addStretch()
+        self.obj_load_scenes_btn = QPushButton("Load Scenes")
+        self.obj_load_scenes_btn.setEnabled(False)
+        self.obj_load_scenes_btn.clicked.connect(self._load_scenes_for_rename)
+        scene_layout.addWidget(self.obj_load_scenes_btn)
+
         tab_layout.addLayout(scene_layout)
 
         # Type filter
@@ -170,7 +174,7 @@ class RenameObjectsTab(BaseOperationTab):
 
         # Update Rename Objects tab (only for .blend files)
         if self.is_blend_file(file_path):
-            self._load_scenes_for_rename()
+            self.obj_load_scenes_btn.setEnabled(True)
             self.obj_load_btn.setEnabled(True)
             self.obj_list.clear()
             self.obj_filter_input.clear()
@@ -178,6 +182,7 @@ class RenameObjectsTab(BaseOperationTab):
         else:
             self.obj_scene_combo.clear()
             self.obj_scene_combo.setEnabled(False)
+            self.obj_load_scenes_btn.setEnabled(False)
             self.obj_load_btn.setEnabled(False)
             self.obj_preview_btn.setEnabled(False)
             self.obj_execute_btn.setEnabled(False)
@@ -191,19 +196,20 @@ class RenameObjectsTab(BaseOperationTab):
             return
 
         try:
-            # Get scenes from Blender service
-            blender_service = self.controller.project.blender_service
-            scenes = blender_service.get_scenes(self.current_file)
+            with self.loading_state(self.obj_load_scenes_btn, "Loading..."):
+                # Get scenes from Blender service
+                blender_service = self.controller.project.blender_service
+                scenes = blender_service.get_scenes(self.current_file)
 
-            self.obj_scene_combo.clear()
-            self.obj_scene_combo.addItem("All")  # Add "All" option first
+                self.obj_scene_combo.clear()
+                self.obj_scene_combo.addItem("All")  # Add "All" option first
 
-            # Populate dropdown with scene names
-            for scene in scenes:
-                self.obj_scene_combo.addItem(scene["name"])
+                # Populate dropdown with scene names
+                for scene in scenes:
+                    self.obj_scene_combo.addItem(scene["name"])
 
-            if scenes:
-                self.obj_scene_combo.setEnabled(True)
+                if scenes:
+                    self.obj_scene_combo.setEnabled(True)
 
         except Exception as e:
             self.show_warning("Load Scenes Error", f"Failed to load scenes:\n\n{str(e)}")

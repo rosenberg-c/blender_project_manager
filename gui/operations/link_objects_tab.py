@@ -94,6 +94,11 @@ class LinkObjectsTab(BaseOperationTab):
         self.link_scene_combo.currentTextChanged.connect(self._on_scene_changed)
         scene_layout.addWidget(self.link_scene_combo, stretch=1)
 
+        self.link_load_target_scenes_btn = QPushButton("Load Scenes")
+        self.link_load_target_scenes_btn.setEnabled(False)
+        self.link_load_target_scenes_btn.clicked.connect(self._load_scenes_for_target)
+        scene_layout.addWidget(self.link_load_target_scenes_btn)
+
         self.link_scene_lock = QCheckBox("🔒 Lock Target")
         self.link_scene_lock.setToolTip("Lock the target file and scene - you can only select a new target after unlocking")
         self.link_scene_lock.stateChanged.connect(self._on_scene_lock_changed)
@@ -123,9 +128,13 @@ class LinkObjectsTab(BaseOperationTab):
 
         self.link_source_scene_combo = QComboBox()
         self.link_source_scene_combo.setEnabled(False)
-        source_scene_layout.addWidget(self.link_source_scene_combo)
+        source_scene_layout.addWidget(self.link_source_scene_combo, stretch=1)
 
-        source_scene_layout.addStretch()
+        self.link_load_source_scenes_btn = QPushButton("Load Scenes")
+        self.link_load_source_scenes_btn.setEnabled(False)
+        self.link_load_source_scenes_btn.clicked.connect(self._load_scenes_for_link_source)
+        source_scene_layout.addWidget(self.link_load_source_scenes_btn)
+
         tab_layout.addLayout(source_scene_layout)
 
         # Type filter
@@ -292,7 +301,7 @@ class LinkObjectsTab(BaseOperationTab):
             if is_blend:
                 self.link_source_file = file_path
                 self.link_source_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
-                self._load_scenes_for_link_source()
+                self.link_load_source_scenes_btn.setEnabled(True)
                 self.link_load_btn.setEnabled(True)
                 # Clear previous items when source changes
                 self.link_items_list.clear()
@@ -304,6 +313,7 @@ class LinkObjectsTab(BaseOperationTab):
                 self.link_source_display.setText(LABEL_SELECT_BLEND_IN_BROWSER)
                 self.link_source_scene_combo.clear()
                 self.link_source_scene_combo.setEnabled(False)
+                self.link_load_source_scenes_btn.setEnabled(False)
                 self.link_load_btn.setEnabled(False)
                 self.link_items_list.clear()
                 self.link_filter_input.clear()
@@ -312,11 +322,12 @@ class LinkObjectsTab(BaseOperationTab):
             # Target is not locked - selected file becomes TARGET
             if is_blend:
                 self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
-                self._load_scenes_for_target()
+                self.link_load_target_scenes_btn.setEnabled(True)
             else:
                 self.link_target_display.setText(LABEL_NO_BLEND_SELECTED)
                 self.link_scene_combo.clear()
                 self.link_scene_combo.setEnabled(False)
+                self.link_load_target_scenes_btn.setEnabled(False)
 
     def _load_scenes_for_target(self):
         """Load scenes from the target .blend file."""
@@ -327,22 +338,23 @@ class LinkObjectsTab(BaseOperationTab):
             return
 
         try:
-            # Get scenes from Blender service
-            blender_service = self.controller.project.blender_service
-            scenes = blender_service.get_scenes(target_file)
+            with self.loading_state(self.link_load_target_scenes_btn, "Loading..."):
+                # Get scenes from Blender service
+                blender_service = self.controller.project.blender_service
+                scenes = blender_service.get_scenes(target_file)
 
-            self.link_scenes = scenes
-            self.link_scene_combo.clear()
+                self.link_scenes = scenes
+                self.link_scene_combo.clear()
 
-            # Populate dropdown
-            for scene in scenes:
-                self.link_scene_combo.addItem(scene["name"])
+                # Populate dropdown
+                for scene in scenes:
+                    self.link_scene_combo.addItem(scene["name"])
 
-            # Update scene combo state (considers lock state)
-            if scenes:
-                self._update_scene_combo_state()
-                # Restore scene selection
-                self._restore_scene_selection()
+                # Update scene combo state (considers lock state)
+                if scenes:
+                    self._update_scene_combo_state()
+                    # Restore scene selection
+                    self._restore_scene_selection()
 
         except Exception as e:
             self.show_warning("Load Scenes Error", f"Failed to load scenes:\n\n{str(e)}")
@@ -402,7 +414,7 @@ class LinkObjectsTab(BaseOperationTab):
             # Update target to current file
             if self.current_file and self.current_file.suffix == '.blend':
                 self.link_target_display.setText(f"<b>{self.current_file.name}</b><br><small>{str(self.current_file)}</small>")
-                self._load_scenes_for_target()
+                self.link_load_target_scenes_btn.setEnabled(True)
 
         # Update scene combo state based on lock
         self._update_scene_combo_state()
@@ -416,19 +428,20 @@ class LinkObjectsTab(BaseOperationTab):
             return
 
         try:
-            # Get scenes from Blender service
-            blender_service = self.controller.project.blender_service
-            scenes = blender_service.get_scenes(self.link_source_file)
+            with self.loading_state(self.link_load_source_scenes_btn, "Loading..."):
+                # Get scenes from Blender service
+                blender_service = self.controller.project.blender_service
+                scenes = blender_service.get_scenes(self.link_source_file)
 
-            self.link_source_scene_combo.clear()
-            self.link_source_scene_combo.addItem("All")  # Add "All" option first
+                self.link_source_scene_combo.clear()
+                self.link_source_scene_combo.addItem("All")  # Add "All" option first
 
-            # Populate dropdown with scene names
-            for scene in scenes:
-                self.link_source_scene_combo.addItem(scene["name"])
+                # Populate dropdown with scene names
+                for scene in scenes:
+                    self.link_source_scene_combo.addItem(scene["name"])
 
-            if scenes:
-                self.link_source_scene_combo.setEnabled(True)
+                if scenes:
+                    self.link_source_scene_combo.setEnabled(True)
 
         except Exception as e:
             self.show_warning("Load Scenes Error", f"Failed to load scenes:\n\n{str(e)}")
