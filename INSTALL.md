@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.13 (not above)
+- Python 3.13 or above
 - Blender 5.0 installed (tested with Blender 5.0, compatibility with earlier versions not guaranteed)
 - pip (Python package manager)
 
