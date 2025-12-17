@@ -28,7 +28,7 @@ A desktop GUI application for managing Blender projects with automatic reference
 ## Installation
 
 ### Prerequisites
-- Python 3.13 (not above)
+- Python 3.13 and above
 - Blender 5.0 installed on your system (tested on Blender 5.0, compatibility with earlier versions not guaranteed)
 
 ### Setup
