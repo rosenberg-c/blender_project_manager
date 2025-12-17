@@ -69,6 +69,12 @@ class LinkObjectsTab(BaseOperationTab):
         desc_label.setWordWrap(True)
         tab_layout.addWidget(desc_label)
 
+        # Auto-load checkbox
+        self.link_auto_load_checkbox = QCheckBox("Auto load scenes when file is selected")
+        self.link_auto_load_checkbox.setToolTip("Automatically load scenes when a .blend file is selected (only when this tab is visible)")
+        self.link_auto_load_checkbox.stateChanged.connect(self._on_auto_load_changed)
+        tab_layout.addWidget(self.link_auto_load_checkbox)
+
         tab_layout.addSpacing(10)
 
         # TARGET SECTION
@@ -307,6 +313,10 @@ class LinkObjectsTab(BaseOperationTab):
                 self.link_items_list.clear()
                 self.link_filter_input.clear()
                 self.link_source_data = {"objects": [], "collections": []}
+
+                # Auto-load if checkbox is checked AND this tab is visible
+                if self.link_auto_load_checkbox.isChecked() and self.isVisible():
+                    self._load_scenes_for_link_source()
             else:
                 # Non-.blend file selected, clear source
                 self.link_source_file = None
@@ -323,6 +333,10 @@ class LinkObjectsTab(BaseOperationTab):
             if is_blend:
                 self.link_target_display.setText(f"<b>{file_path.name}</b><br><small>{str(file_path)}</small>")
                 self.link_load_target_scenes_btn.setEnabled(True)
+
+                # Auto-load if checkbox is checked AND this tab is visible
+                if self.link_auto_load_checkbox.isChecked() and self.isVisible():
+                    self._load_scenes_for_target()
             else:
                 self.link_target_display.setText(LABEL_NO_BLEND_SELECTED)
                 self.link_scene_combo.clear()
@@ -386,6 +400,10 @@ class LinkObjectsTab(BaseOperationTab):
         # Note: link_as_hidden_checkbox stays visible - it works for both modes
 
         # Save the preference
+        self._save_link_state()
+
+    def _on_auto_load_changed(self, state: int):
+        """Handle auto-load checkbox state change."""
         self._save_link_state()
 
     def _update_scene_combo_state(self):
@@ -771,6 +789,9 @@ class LinkObjectsTab(BaseOperationTab):
             # Save auto-copy name checkbox state
             link_state['auto_copy_name'] = self.link_auto_copy_name_checkbox.isChecked()
 
+            # Save auto-load checkbox state
+            link_state['auto_load'] = self.link_auto_load_checkbox.isChecked()
+
             config_data['link_operation'] = link_state
 
             # Write back to file
@@ -851,6 +872,10 @@ class LinkObjectsTab(BaseOperationTab):
             # Restore auto-copy name checkbox state
             auto_copy_name = link_state.get('auto_copy_name', False)
             self.link_auto_copy_name_checkbox.setChecked(auto_copy_name)
+
+            # Restore auto-load checkbox state
+            auto_load = link_state.get('auto_load', False)
+            self.link_auto_load_checkbox.setChecked(auto_load)
 
         except Exception as e:
             print(f"Warning: Could not restore link operation state: {e}")
